@@ -1,0 +1,2709 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WL TAPP3_2026 Master Dashboard (ครบ 281 Worklist + แก้ไขวันเข้างาน + Critical Gantt)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Sarabun', sans-serif; background-color: #f1f5f9; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    .gantt-grid { display: grid; grid-template-columns: 330px 115px 95px 70px repeat(35, minmax(25px, 1fr)); }
+    .sticky-col-1 { position: sticky; left: 0; z-index: 10; background: inherit; }
+    .sticky-col-2 { position: sticky; left: 330px; z-index: 10; background: inherit; }
+    @keyframes pulse-highlight {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+      50% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.35); }
+    }
+    .card-highlight { animation: pulse-highlight 1.8s ease-in-out 2; border-color: #2563eb !important; }
+    @media print {
+      @page { size: A4 portrait; margin: 10mm; }
+      body { background: #fff !important; color: #000 !important; }
+      .no-print { display: none !important; }
+      #handoverPrintArea { display: block !important; position: static !important; width: 100% !important; box-shadow: none !important; }
+      .print-break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+      table.print-table { width: 100%; border-collapse: collapse; }
+      table.print-table th, table.print-table td { border: 1px solid #334155 !important; padding: 5px 6px !important; font-size: 10px !important; }
+    }
+  </style>
+</head>
+<body class="text-slate-800">
+
+  <div id="appWrapper" class="no-print">
+    <!-- Top Header -->
+    <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-lg border-b border-slate-700">
+      <div class="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-extrabold text-lg shadow-inner">PP3</div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="font-bold text-lg tracking-wide">WL TAPP3_2026 Master Turnaround Dashboard</h1>
+              <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs px-2.5 py-0.5 rounded-full font-bold">
+                ครบ 281 Worklist • แก้ไขวันเข้างานได้ • Critical Path Gantt
+              </span>
+            </div>
+            <p class="text-xs text-slate-400">01 Nov – 05 Dec 2026 (35 Days) • เลือกดูงานรายวัน + งานค้างสะสม + Worklist by Day + เลือก Vendor + แนบรูป</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="inline-flex rounded-xl bg-slate-800 p-1 border border-slate-700">
+            <button id="mainTab1Btn" onclick="switchMainView('DASHBOARD')" class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-blue-600 text-white shadow transition">
+              📋 1. แท็บ Worklist หลัก (281 งาน) & S-Curve
+            </button>
+            <button id="mainTab2Btn" onclick="switchMainView('CRITICAL')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition">
+              🔥 2. แท็บ Critical Path & Gantt Chart
+            </button>
+          </div>
+
+          <label class="cursor-pointer bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-3 py-2 rounded-lg shadow transition">
+            <span>📂 ซิงก์ไฟล์ Excel</span>
+            <input type="file" accept=".xlsx,.xls" class="hidden" onchange="handleExcelUploadSync(event)" />
+          </label>
+
+          <button onclick="openHandoverModal()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold px-3 py-2 rounded-lg shadow transition">
+            🖨️ ใบส่งมอบ Vendor (PDF)
+          </button>
+
+          <button onclick="openAddTaskModal()" class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold px-3 py-2 rounded-lg transition">
+            + เพิ่ม Add Work
+          </button>
+
+          <button onclick="exportAllToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-lg shadow transition">
+            📥 Export (.xlsx)
+          </button>
+
+          <button onclick="resetToDefaultData()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs px-2.5 py-2 rounded-lg transition" title="รีเซ็ตข้อมูลเริ่มต้น">
+            🔄 รีเซ็ต
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-[1600px] mx-auto px-4 py-4 space-y-5">
+
+      <!-- 1. TOP 35-DAY INTERACTIVE CALENDAR & DAILY CARRYOVER SELECTOR -->
+      <section class="bg-white p-4 rounded-xl shadow-sm border-2 border-blue-200 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold">📅</div>
+            <div>
+              <h2 class="font-bold text-slate-900 text-sm sm:text-base">เลือกวันที่ต้องการตรวจสอบงานประจำวัน (Daily Work, Vendor & Carryover Tracker)</h2>
+              <p class="text-xs text-slate-500">คลิกเลือกวันที่เพื่อดูว่า <strong>วันนั้นมีงานอะไรของใคร / Vendor เจ้าไหนบ้าง</strong> (เมื่อแก้ไขวันเข้างาน ตัวเลขในปฏิทินและ S-Curve จะอัปเดตทันที)</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="dailyFilterMode" onchange="resetPageAndRender()" class="text-xs border border-blue-300 bg-blue-50 text-blue-900 font-bold rounded-lg px-3 py-1.5">
+              <option value="TODAY_AND_CARRYOVER">📌 แสดง: งานตามแผนวันนี้ + งานค้างสะสมที่ยังไม่เสร็จ (แนะนำ)</option>
+              <option value="TODAY_ONLY">📅 แสดงเฉพาะ: งานที่มีแผนเข้าทำในวันนี้เท่านั้น</option>
+              <option value="CARRYOVER_ONLY">⚠️ แสดงเฉพาะ: งานค้างสะสมจากวันก่อนหน้า (Backlog)</option>
+            </select>
+
+            <label class="flex items-center gap-1.5 text-xs bg-slate-100 px-2.5 py-1.5 rounded-lg cursor-pointer border border-slate-200 font-medium text-slate-700">
+              <input type="checkbox" id="hideCompletedInDaily" onchange="resetPageAndRender()" class="rounded text-blue-600" />
+              <span>ซ่อนงานที่เสร็จ 100% แล้ว</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1.5 overflow-x-auto custom-scroll pb-2 pt-1" id="calendarStrip"></div>
+
+        <div id="dailyOverviewBox" class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span id="selectedDateBadge" class="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-lg shadow-sm">แสดงทุกวันรวมกัน</span>
+              <span id="selectedDateSummaryText" class="text-xs text-slate-600 font-medium"></span>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold" id="badgeSchedToday">ตามแผนวันนี้: 0 งาน</span>
+              <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold" id="badgeCarryover">งานค้างสะสม: 0 งาน</span>
+              <span class="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold" id="badgeDoneToday">เสร็จแล้ว: 0 งาน</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-700">สรุปภาระงานในวันที่เลือก (คลิกที่การ์ดเพื่อกรองดูเฉพาะงานนั้น):</span>
+                <div class="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 text-[11px]">
+                  <button id="btnDailyGroupVendor" onclick="setDailyGroupBy('VENDOR')" class="px-2.5 py-0.5 rounded-md font-bold bg-violet-600 text-white transition">
+                    🏢 แยกตาม Vendor / ผู้รับเหมา
+                  </button>
+                  <button id="btnDailyGroupResp" onclick="setDailyGroupBy('RESP')" class="px-2.5 py-0.5 rounded-md font-bold text-slate-600 hover:text-slate-900 transition">
+                    👷 แยกตามผู้รับผิดชอบ
+                  </button>
+                </div>
+              </div>
+              <button onclick="clearPersonAndVendorFilter()" id="clearPersonBtn" class="hidden text-xs text-rose-600 hover:underline font-bold">
+                ✕ ล้างตัวกรองชื่อ/Vendor (แสดงทั้งหมด)
+              </button>
+            </div>
+            <div id="dailyPersonGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 1: MAIN WORKLIST DASHBOARD (281 ITEMS)                        -->
+      <!-- ================================================================== -->
+      <div id="mainViewDashboard" class="space-y-5">
+
+        <!-- KPI CARDS -->
+        <section class="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div class="text-xs text-slate-500 font-medium">ความคืบหน้ารวมทั้ง T/A (Actual)</div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span id="kpiActualPct" class="text-2xl font-bold text-blue-600">0.0%</span>
+              <span id="kpiVariance" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">vs Plan</span>
+            </div>
+            <div class="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden">
+              <div id="kpiActualBar" class="bg-blue-600 h-full rounded-full transition-all duration-300" style="width:0%"></div>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div class="text-xs text-slate-500 font-medium">เป้าหมาย S-Curve ณ วันที่เลือก</div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span id="kpiPlanPct" class="text-2xl font-bold text-indigo-600">0.0%</span>
+              <select id="currentDaySelect" onchange="selectCalendarDay(parseInt(this.value, 10))" class="text-xs border border-slate-200 rounded px-1.5 py-0.5 bg-slate-50 text-slate-700 font-medium"></select>
+            </div>
+            <p id="kpiPhaseText" class="text-[11px] text-slate-400 mt-2 truncate">Phase: SD + PURGE</p>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div class="text-xs text-slate-500 font-medium">Worklist ทั้งหมด (Active / รวม)</div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span id="kpiTaskCount" class="text-2xl font-bold text-slate-800">275 / 281</span>
+              <span id="kpiCompletedTasks" class="text-xs text-emerald-600 font-semibold">เสร็จ 0 งาน</span>
+            </div>
+            <p id="kpiInProgressTasks" class="text-[11px] text-amber-600 mt-2">กำลังทำ 0 | รอเริ่ม 275 | ยกเลิก 6</p>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div class="text-xs text-slate-500 font-medium">งานย่อยมาตรฐาน (Sub-Tasks)</div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span id="kpiSubTaskDone" class="text-2xl font-bold text-emerald-600">0/0</span>
+              <span class="text-xs text-slate-400">ขั้นตอน</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-2">ติ๊กเสร็จครบ 100% เพื่อเคลียร์งานค้าง</p>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 col-span-2 md:col-span-1">
+            <div class="text-xs text-slate-500 font-medium">รูปถ่ายหน้างาน (Photos)</div>
+            <div class="mt-2 flex items-baseline gap-2">
+              <span id="kpiPhotoCount" class="text-2xl font-bold text-rose-600">0</span>
+              <span class="text-xs text-slate-400">รูปแนบแล้ว</span>
+            </div>
+            <button onclick="openPhotoGalleryModal()" class="text-[11px] text-blue-600 hover:underline mt-2 font-bold">
+              🖼️ เปิดดูคลังรูปภาพทั้งหมด
+            </button>
+          </div>
+        </section>
+
+        <!-- S-CURVE & BREAKDOWN -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 lg:col-span-2 flex flex-col">
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+              <div>
+                <h2 class="font-bold text-slate-800">📈 T/A S-Curve: Plan vs. Actual (คำนวณตามวันเข้างานจริงของทั้ง 281 Worklist)</h2>
+                <p class="text-xs text-slate-500">เมื่อคุณแก้ไขวันเข้างานของ Worklist ใดๆ เส้น Planned S-Curve และกราฟแท่งรายวันจะปรับตามอัตโนมัติ</p>
+              </div>
+              <span id="totalTaskDaysBadge" class="text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg">1,457 Task-Days</span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-1.5 my-2 text-[11px] font-semibold text-center">
+              <div class="bg-amber-50 text-amber-800 border border-amber-200 rounded py-1">1–8 พ.ย. : SD + PURGE</div>
+              <div class="bg-blue-50 text-blue-800 border border-blue-200 rounded py-1">9–25 พ.ย. : MAINTENANCE WORK</div>
+              <div class="bg-emerald-50 text-emerald-800 border border-emerald-200 rounded py-1">26 พ.ย.–5 ธ.ค. : COMMISSIONING + SU</div>
+            </div>
+
+            <div class="relative flex-1 min-h-[250px] w-full">
+              <canvas id="sCurveChart"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h2 class="font-bold text-slate-800 text-sm">ความคืบหน้าแยกตามหมวดหมู่ (281 งาน)</h2>
+                <select id="breakdownMode" onchange="renderBreakdownList()" class="text-xs border border-slate-200 rounded px-2 py-1 bg-slate-50 font-bold text-violet-700">
+                  <option value="vendor" selected>🏢 แยกตาม Vendor / ผู้รับเหมา</option>
+                  <option value="resp">👤 แยกตามผู้รับผิดชอบ (19 ทีม)</option>
+                  <option value="category">📂 แยกตามหมวดงาน (7 หมวด)</option>
+                  <option value="section">🏭 แยกตาม Section (100–900)</option>
+                </select>
+              </div>
+              <div id="breakdownContainer" class="mt-3 space-y-2.5 max-h-[260px] overflow-y-auto custom-scroll pr-1"></div>
+            </div>
+
+            <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs bg-rose-50/70 p-2.5 rounded-lg border border-rose-200">
+              <div>
+                <span class="font-bold text-rose-800">ดูตาราง Critical Path Gantt</span>
+                <p class="text-[11px] text-rose-600">EX-3801, EX-7801, A-3401, C-3401 & 281 งาน</p>
+              </div>
+              <button onclick="switchMainView('CRITICAL')" class="bg-rose-600 hover:bg-rose-500 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm transition">
+                🔥 เปิดแท็บ Gantt
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- "WORKLIST BY DAY" STRIP & NUMBERED ROWS (1, 2, 3...) -->
+        <section class="bg-white p-4 rounded-xl shadow-md border-2 border-indigo-200 space-y-3" id="worklistByDaySection">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200">
+            <div class="flex items-center gap-2.5">
+              <span class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-extrabold text-xs tracking-wide shadow-sm">
+                WORKLIST BY DAY
+              </span>
+              <div>
+                <h2 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <span>ตารางแถบรายการงานรายวัน (เรียงลำดับ 1, 2, 3...) + แก้ไขวันเข้างาน & เลือก Vendor</span>
+                  <span id="wbdCountBadge" class="bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs px-2 py-0.5 rounded-full font-bold">0 รายการ</span>
+                </h2>
+                <p class="text-xs text-slate-500">กดปุ่ม <strong class="text-blue-700">"📅 แก้ไขวันเข้างาน"</strong> เพื่อเปลี่ยนวันเริ่ม-จบงาน หรือเปลี่ยนชื่อ Vendor จาก Dropdown ได้ทุกแถว</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="inline-flex rounded-lg border border-slate-300 bg-slate-100 p-0.5 text-xs">
+                <button id="btnWbdModeList" onclick="setWbdMode('NUMBERED_LIST')" class="px-3 py-1 rounded-md font-bold bg-indigo-600 text-white shadow-sm transition">
+                  📋 เรียงลำดับ 1, 2, 3... (ตามวันที่เลือก)
+                </button>
+                <button id="btnWbdModeDays" onclick="setWbdMode('BY_ALL_DAYS')" class="px-3 py-1 rounded-md font-semibold text-slate-600 hover:text-slate-900 transition">
+                  📆 แยกเป็นแถบรายวัน (Day 1 – Day 35)
+                </button>
+              </div>
+              <button onclick="toggleCollapseWbd()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-2.5 py-1.5 rounded-lg border border-slate-200 transition">
+                ย่อ/ขยายแถบนี้
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-1 overflow-x-auto custom-scroll pb-1.5" id="wbdMiniDayStrip"></div>
+          <div id="wbdBodyContainer" class="space-y-2 max-h-[420px] overflow-y-auto custom-scroll pr-1"></div>
+        </section>
+
+        <!-- WORKLIST FILTER BAR & 2-COLUMN CARDS -->
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h2 class="font-bold text-slate-800">รายการ Worklist ทั้ง 281 งาน (การ์ดรายละเอียด, แก้ไขวันเข้างาน, เลือก Vendor & แนบรูปภาพ)</h2>
+              <span class="text-xs bg-blue-50 text-blue-700 border border-blue-200 font-bold px-2.5 py-0.5 rounded-full">
+                แสดงผล <span id="filteredCount">281</span> รายการ
+              </span>
+            </div>
+
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-slate-500">แสดงหน้าละ:</span>
+              <select id="pageSizeSelect" onchange="changePageSize()" class="border border-slate-300 rounded px-2 py-1 bg-white font-semibold">
+                <option value="30">30 งาน/หน้า</option>
+                <option value="60" selected>60 งาน/หน้า</option>
+                <option value="100">100 งาน/หน้า</option>
+                <option value="999">แสดงทั้งหมด (All 281)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5">
+            <input type="text" id="searchInput" oninput="resetPageAndRender()" placeholder="🔍 ค้นหา Tag, MO, Vendor, รายละเอียด..." class="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <select id="filterVendor" onchange="resetPageAndRender()" class="text-xs border-2 border-violet-300 bg-violet-50/50 text-violet-900 font-bold rounded-lg px-2.5 py-2"></select>
+            <select id="filterResp" onchange="resetPageAndRender()" class="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white"></select>
+            <select id="filterSec" onchange="resetPageAndRender()" class="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white">
+              <option value="ALL">🏭 ทุกพื้นที่ (Sections 100–900)</option>
+              <option value="100">Section 100 (28 งาน)</option>
+              <option value="200">Section 200 (27 งาน)</option>
+              <option value="300">Section 300 (29 งาน)</option>
+              <option value="400">Section 400 (17 งาน)</option>
+              <option value="500">Section 500 (30 งาน)</option>
+              <option value="600">Section 600 (27 งาน)</option>
+              <option value="700">Section 700 (3 งาน)</option>
+              <option value="800">Section 800 (111 งาน)</option>
+              <option value="900">Section 900 (9 งาน)</option>
+            </select>
+            <select id="filterCat" onchange="resetPageAndRender()" class="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white">
+              <option value="ALL">📂 ทุกหมวดงาน (7 หมวด - 281 งาน)</option>
+              <option value="ME PM Works_EQ ROTATING">1. ME PM Works_EQ ROTATING (77)</option>
+              <option value="ME PM Works_BAG-FILTER & FILTER">2. ME PM Works_BAG-FILTER & FILTER (34)</option>
+              <option value="MES_Water Jet Cleanning Works">3. MES_Water Jet Cleanning Works (81)</option>
+              <option value='MES_Water Jet Cleanning Works "PHE"'>4. MES_Water Jet Cleanning Works "PHE" (14)</option>
+              <option value='MES_Water Jet Cleanning Works "ROI Request"'>5. MES_Water Jet Cleanning Works "ROI Request" (27)</option>
+              <option value="ME CM / IM Works & ROI List">6. ME CM / IM Works & ROI List (35)</option>
+              <option value="Add_Work ( After Freeze W/L )">7. Add_Work ( After Freeze W/L ) (13)</option>
+            </select>
+            <select id="filterStatus" onchange="resetPageAndRender()" class="text-xs border border-slate-300 rounded-lg px-2.5 py-2 bg-white">
+              <option value="ACTIVE_ONLY" selected>⚡ เฉพาะงานที่ดำเนินการ (275)</option>
+              <option value="ALL">รวมทุกสถานะ (281 งาน)</option>
+              <option value="PENDING">⏳ รอเริ่มงาน (0%)</option>
+              <option value="IN_PROGRESS">🔧 กำลังดำเนินการ (1–99%)</option>
+              <option value="COMPLETED">✅ เสร็จสมบูรณ์ (100%)</option>
+              <option value="CANCELLED">🚫 ยกเลิก W/L (6 งาน)</option>
+              <option value="HAS_PHOTO">📷 มีรูปถ่ายแนบแล้ว</option>
+            </select>
+          </div>
+
+          <div id="paginationBar" class="flex items-center justify-between pt-2 border-t border-slate-100 text-xs"></div>
+        </section>
+
+        <section id="taskListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4"></section>
+        <div id="paginationBarBottom" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between text-xs"></div>
+      </div>
+
+      <!-- ================================================================== -->
+      <!-- VIEW 2: CRITICAL WORK & GANTT CHART MONITOR (EDITABLE CELLS!)      -->
+      <!-- ================================================================== -->
+      <div id="mainViewCritical" class="hidden space-y-4">
+        <section class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button onclick="selectGanttPkg('EX-3801')" data-gpkg="EX-3801" class="gpkg-btn px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-600 text-white shadow-sm transition">
+                ⚙️ EX-3801 (Train 1 - 76 Tasks)
+              </button>
+              <button onclick="selectGanttPkg('EX-7801')" data-gpkg="EX-7801" class="gpkg-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                ⚙️ EX-7801 (Train 2 - 76 Tasks)
+              </button>
+              <button onclick="selectGanttPkg('A-3401')" data-gpkg="A-3401" class="gpkg-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                🌀 A-3401 & R-3401 (16 Tasks)
+              </button>
+              <button onclick="selectGanttPkg('C-3401')" data-gpkg="C-3401" class="gpkg-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                💨 C-3401 Compressor & Gear (34 Tasks)
+              </button>
+              <button onclick="selectGanttPkg('WL_CRIT')" data-gpkg="WL_CRIT" class="gpkg-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                🏗️ งาน Critical หลักจาก WL_TA26
+              </button>
+              <button onclick="selectGanttPkg('WL_ALL281')" data-gpkg="WL_ALL281" class="gpkg-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100 transition">
+                📋 ตาราง Gantt ทั้ง 281 Worklist (แก้ไขวันได้)
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 text-xs">
+              <label class="flex items-center gap-1.5 bg-rose-50 border border-rose-200 text-rose-800 px-2.5 py-1.5 rounded-lg font-bold cursor-pointer">
+                <input type="checkbox" id="ganttOnlyCp" onchange="renderCriticalGanttView()" class="rounded text-rose-600" />
+                <span>🔴 เฉพาะ Critical Path</span>
+              </label>
+              <input type="text" id="ganttSearchInput" oninput="renderCriticalGanttView()" placeholder="🔍 ค้นหาในตาราง Gantt..." class="border border-slate-300 rounded-lg px-2.5 py-1.5 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </div>
+
+          <div id="ganttSummaryBanner" class="bg-slate-900 text-white p-3 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs"></div>
+        </section>
+
+        <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div class="px-4 py-2.5 bg-slate-800 text-white flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div class="flex items-center gap-3 flex-wrap">
+              <span class="font-bold">📊 ตาราง Critical Path & Master Gantt Chart (01 Nov – 05 Dec 2026)</span>
+              <span class="bg-amber-400 text-slate-950 font-extrabold px-2 py-0.5 rounded">💡 คลิกที่ช่องสี่เหลี่ยมของวันใดก็ได้ในตารางเพื่อ เพิ่ม/ลบ วันเข้างาน หรือกดปุ่ม "📅 แก้ไข"</span>
+            </div>
+            <div class="text-slate-300">คลิกที่ปุ่ม <strong>%</strong> เพื่ออัปเดตสถานะความคืบหน้า</div>
+          </div>
+
+          <div class="overflow-x-auto custom-scroll max-h-[650px]">
+            <div class="min-w-[1480px]" id="masterGanttTableContainer"></div>
+          </div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODAL 1: SCHEDULE EDITOR (แก้ไขวันเข้างานของแต่ละ Worklist / Task)     -->
+  <!-- ==================================================================== -->
+  <div id="scheduleModal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden">
+      <div class="px-5 py-3.5 bg-slate-900 text-white flex items-center justify-between">
+        <div>
+          <span id="schModalTag" class="text-[11px] font-bold bg-blue-600 px-2 py-0.5 rounded">Sec 100 • A-3106A</span>
+          <h3 id="schModalTitle" class="font-bold text-sm mt-1">แก้ไขวันเข้างาน (Edit Work Schedule)</h3>
+        </div>
+        <button onclick="closeScheduleModal()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-3.5 space-y-2">
+          <div class="font-bold text-blue-900">วิธีที่ 1: เลือกช่วงวันเริ่มงาน – วันจบงาน (ระบบจะเลือกทุกวันในช่วงนี้ให้อัตโนมัติ)</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">วันเริ่มเข้างาน (Start Date):</label>
+              <select id="schStartSelect" class="w-full border border-slate-300 bg-white rounded-lg px-2.5 py-2 font-bold text-slate-800"></select>
+            </div>
+            <div>
+              <label class="block font-semibold text-slate-700 mb-1">วันจบงาน (End Date):</label>
+              <select id="schEndSelect" class="w-full border border-slate-300 bg-white rounded-lg px-2.5 py-2 font-bold text-slate-800"></select>
+            </div>
+            <button onclick="applyQuickDateRange()" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-3 rounded-lg shadow-sm transition">
+              ✓ กำหนดช่วงวันเข้างานนี้
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-800">วิธีที่ 2: คลิกเลือกหรือเว้นวันเข้างานรายวัน (35 วัน: 01 Nov – 05 Dec 2026)</span>
+            <div class="flex items-center gap-3">
+              <span id="schSelectedCount" class="font-extrabold text-indigo-700">เลือกไว้ 0 วัน</span>
+              <button onclick="clearAllPickedDays()" class="text-rose-600 hover:underline font-bold">ล้างทั้งหมด</button>
+            </div>
+          </div>
+          <div id="schDayGrid" class="grid grid-cols-7 gap-1.5"></div>
+        </div>
+
+        <div id="schExtraFields" class="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">ผู้รับผิดชอบ (Responsible Person):</label>
+            <input type="text" id="schRespInput" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 font-semibold" />
+          </div>
+          <div>
+            <label class="block font-bold text-violet-800 mb-1">Vendor / ผู้รับเหมา:</label>
+            <input type="text" id="schVendorInput" class="w-full border border-violet-300 bg-violet-50 rounded-lg px-3 py-1.5 font-bold text-violet-900" />
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 bg-slate-100 border-t border-slate-200 flex items-center justify-end gap-2">
+        <button onclick="closeScheduleModal()" class="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-200">ยกเลิก</button>
+        <button onclick="saveScheduleModal()" class="px-5 py-2 rounded-lg text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow">
+          💾 บันทึกวันเข้างานและอัปเดตระบบทันที
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: VENDOR HANDOVER PRINT (A4 PDF) -->
+  <div id="handoverModal" class="fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[94vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-3.5 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-3 no-print">
+        <div>
+          <h3 class="font-bold text-base">🖨️ ใบตรวจรับและส่งมอบงานผู้รับเหมา (Vendor Handover & QA/QC Sign-off Certificate)</h3>
+          <p class="text-xs text-slate-400">เลือก Vendor แล้วกดปุ่ม "สั่งพิมพ์ / Save as PDF (A4)" ได้ทันที</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-extrabold px-4 py-2 rounded-lg shadow">
+            🖨️ สั่งพิมพ์ / Save as PDF (A4)
+          </button>
+          <button onclick="closeHandoverModal()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold">✕ ปิด</button>
+        </div>
+      </div>
+
+      <div class="p-3.5 bg-slate-100 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs no-print">
+        <div>
+          <label class="block font-bold text-violet-800 mb-1">1. เลือก Vendor ที่ต้องการออกใบส่งมอบ:</label>
+          <select id="hoVendorSelect" onchange="renderHandoverSheet()" class="w-full border-2 border-violet-400 bg-white text-violet-950 font-extrabold rounded-lg px-2.5 py-1.5"></select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">2. กรองตามพื้นที่ (Section):</label>
+          <select id="hoSecSelect" onchange="renderHandoverSheet()" class="w-full border border-slate-300 bg-white rounded-lg px-2.5 py-1.5 font-semibold">
+            <option value="ALL">ทุกพื้นที่ (All Sections 100–900)</option>
+            <option value="100">Section 100</option><option value="200">Section 200</option>
+            <option value="300">Section 300</option><option value="400">Section 400</option>
+            <option value="500">Section 500</option><option value="600">Section 600</option>
+            <option value="700">Section 700</option><option value="800">Section 800</option>
+            <option value="900">Section 900</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">3. วันที่ออกเอกสารส่งมอบ:</label>
+          <input type="text" id="hoDocDate" value="25 พฤศจิกายน 2026" oninput="renderHandoverSheet()" class="w-full border border-slate-300 bg-white rounded-lg px-2.5 py-1.5 font-semibold" />
+        </div>
+      </div>
+
+      <div class="p-6 overflow-y-auto custom-scroll flex-1 bg-slate-200/70">
+        <div id="handoverPrintArea" class="bg-white max-w-5xl mx-auto p-8 rounded-xl shadow-md border border-slate-300 text-slate-900 space-y-5"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: ADD NEW WORKLIST -->
+  <div id="addTaskModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
+      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <h3 class="font-bold text-base">เพิ่มรายการงานหลักใหม่ (Add Work)</h3>
+        <button onclick="closeAddTaskModal()" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+      </div>
+      <div class="p-5 space-y-3 text-xs">
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold mb-1">Section</label>
+            <select id="newTaskSec" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+              <option value="100">100</option><option value="200">200</option><option value="300">300</option>
+              <option value="400">400</option><option value="500">500</option><option value="600">600</option>
+              <option value="700">700</option><option value="800" selected>800</option><option value="900">900</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">Equipment Tag</label>
+            <input type="text" id="newTaskTag" placeholder="เช่น EX-3801" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">วันเริ่ม–จบ (1–35)</label>
+            <div class="flex gap-1">
+              <input type="number" id="newTaskStartDay" min="1" max="35" value="8" class="w-1/2 border border-slate-300 rounded-lg px-2 py-2" />
+              <input type="number" id="newTaskEndDay" min="1" max="35" value="14" class="w-1/2 border border-slate-300 rounded-lg px-2 py-2" />
+            </div>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">หมวดงาน (Category)</label>
+          <select id="newTaskCat" class="w-full border border-slate-300 rounded-lg px-3 py-2">
+            <option value="ME PM Works_EQ ROTATING">ME PM Works_EQ ROTATING</option>
+            <option value="ME PM Works_BAG-FILTER & FILTER">ME PM Works_BAG-FILTER & FILTER</option>
+            <option value="MES_Water Jet Cleanning Works">MES_Water Jet Cleanning Works</option>
+            <option value='MES_Water Jet Cleanning Works "PHE"'>MES_Water Jet Cleanning Works "PHE"</option>
+            <option value='MES_Water Jet Cleanning Works "ROI Request"'>MES_Water Jet Cleanning Works "ROI Request"</option>
+            <option value="ME CM / IM Works & ROI List">ME CM / IM Works & ROI List</option>
+            <option value="Add_Work ( After Freeze W/L )" selected>Add_Work ( After Freeze W/L )</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">รายละเอียดงาน (W/L Description)</label>
+          <textarea id="newTaskDesc" rows="2" class="w-full border border-slate-300 rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold mb-1">ผู้รับผิดชอบ</label>
+            <input type="text" id="newTaskResp" placeholder="เช่น SARIN S." class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block font-semibold text-violet-700 mb-1">Vendor / ผู้รับเหมา</label>
+            <select id="newTaskVendorSelect" class="w-full border border-violet-300 bg-violet-50 rounded-lg px-3 py-2 font-bold text-violet-900"></select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold mb-1">MO No.</label>
+            <input type="text" id="newTaskMO" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">LOTO No.</label>
+            <input type="text" id="newTaskLoto" class="w-full border border-slate-300 rounded-lg px-3 py-2" />
+          </div>
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-100 border-t border-slate-200 flex justify-end gap-2">
+        <button onclick="closeAddTaskModal()" class="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600">ยกเลิก</button>
+        <button onclick="createNewTask()" class="px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white">บันทึกงานใหม่</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: PHOTO GALLERY -->
+  <div id="photoGalleryModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden items-center justify-center p-4 no-print">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <h3 class="font-bold text-base">คลังรูปภาพการปฏิบัติงาน (Turnaround Photo Evidence)</h3>
+        <button onclick="closePhotoGalleryModal()" class="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+      </div>
+      <div id="photoGalleryGrid" class="p-5 overflow-y-auto custom-scroll grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================================
+    // 1. 35-DAY CALENDAR (01 Nov - 05 Dec 2026)
+    // ============================================================================
+    const DAY_CHARS = "123456789abcdefghijklmnopqrstuvwxyz";
+    const DAYS_35 = Array.from({ length: 35 }, (_, i) => {
+      const d = i + 1;
+      return {
+        day: d,
+        short: d <= 30 ? `${d}` : `${d - 30}`,
+        month: d <= 30 ? "Nov" : "Dec",
+        label: d <= 30 ? `${String(d).padStart(2, "0")} Nov` : `${String(d - 30).padStart(2, "0")} Dec`,
+        phase: d <= 8 ? "SD + PURGE" : (d <= 25 ? "MAINTENANCE WORK" : "COMMISSIONING + SU")
+      };
+    });
+
+    const DEFAULT_VENDORS = [
+      "TSP", "JRN", "SYSTEMCORP", "STP", "PROTECH", "PROTECH / RMT",
+      "JOHNSON CONTROL / PROTECH", "SYNERGY", "KSB", "MTE", "BURCKHARDT",
+      "PSS", "CR3", "HHP", "AMD", "W/S ST", "RMT (In-House)"
+    ];
+
+    const CATEGORIES = [
+      'ME PM Works_EQ ROTATING',
+      'ME PM Works_BAG-FILTER & FILTER',
+      'MES_Water Jet Cleanning Works',
+      'MES_Water Jet Cleanning Works "PHE"',
+      'MES_Water Jet Cleanning Works "ROI Request"',
+      'ME CM / IM Works & ROI List',
+      'Add_Work ( After Freeze W/L )'
+    ];
+
+    const RESPONSIBLES = [
+      'ATSADA L.', 'JATUPONG K.', 'JIRAPAT S.', 'KOMSUN P.', 'MES / AMD',
+      'MES / CR3', 'MES / HHP', 'MES / JRN', 'MES / SYSTEMCOPR', 'MES / TSP',
+      'MES / TSP / ROI', 'PAISIT S.', 'PATCHARA P.', 'RONNACHAI L. > Protech PP1-2',
+      'SARIN S.', 'THODSAWAT N.', 'THODSAWAT N. [KOMSUN P. / JIRAPAT S.]',
+      'WATCHARA P.', 'มือปืน ROTAT1 (ศิริพงษ์ + ทรงกรด_TPC)'
+    ];
+
+    const SUP_LIST = ['SP', 'IE', 'EE', 'INSU', 'SCAFF', 'HAEB/CRANE', 'TORQUE', 'ROI'];
+
+    const DICT = {
+      "~A": "TA26_MT ITEM FOR ", "~B": "TA26_", "~C": "Water jet Cleaning", "~D": "Water jet cleaning",
+      "~E": "Water jet cleanning", "~F": "Cleaning & Tube inspection > (ดึง Bundle ไม่ได้) เปลี่ยนไป Y2025",
+      "~G": "Cleaning & Tube inspection > (ดึง Bundle ได้) เปลี่ยนไป Y2025", "~H": "Cleaning & Tube inspection > (ดึง Bundle ไม่ได้)",
+      "~I": "Cleaning & Tube inspection  > (ดึง Bundle ได้)", "~J": "Cleanning plate & Change Rubber Gasket",
+      "~K": "Cleaning plate & Change Rubber Gasket", "~L": " > ROI Support Borescope", "~M": " > ROI Support borescope",
+      "~N": "ออก PO. เรียบร้อยแล้ว , สั่ง Mat's ให้ JRN แล้ว", "~O": "สั่ง Mat's ให้ JRN แล้ว > ยังไม่ได้ทำเสนอราคางาน FAB",
+      "~P": " > ยังไม่ได้ทำเสนอราคางาน FAB", "~Q": "Change oil , Check chain coupling",
+      "~R": "Check chain coupling , Clean filter oil", "~S": "Check chain coupling", "~T": "Change Bag-Filter",
+      "~U": "Move @ Shop STP O/H ~ 21 วัน ( ROI_ร่วมตรวจสอบที่ STP )", "~V": "Remove + Inspec & Clean",
+      "~W": "Inspec fab valve pellet screen _ Change rubber fab valve + Inspec Tee way valve",
+      "~X": "O/H Pellet dryer > O/H , Inspec blade & PT Shaft By_ROI , Change Suct.Air filter",
+      "~Y": "Fire water Clean inside PCW Tank > Clean mesh > ใช้น้ำ DW Clean > Confine",
+      "~Z": "Fire water Clean inside BCW Tank + Inspec ball check valve > ใช้น้ำ DW Clean",
+      "~a": "Water jet Cleaning HOMO screw feeder + Line Balance & Line vent All",
+      "~b": "Water jet Cleaning screw feeder + Line Balance & Line vent All",
+      "~c": "Water jet Cleaning  inside pellet dryer + ถอด Screen clear fines > ใช้น้ำ DW Clean",
+      "~d": "Clean & Inspec line additive", "~e": "Water jet cleaning cyclone / PT Support & Welding crack",
+      "~f": "Water jet cleaning inside SSB Drum Blender > Additive building > Confine",
+      "~g": "Water jet cleaning inside SSB Feed Hopper > Additive building",
+      "~h": "Clean line vent suct / disc exhaust fan plug + Water jet line เข้า Cyclone",
+      "~i": "HPWJ Dump out line > ROI Support borescope > รอผลิต Confirm",
+      "~j": "PM 1Y ", "~k": "PM 3Y ", "~l": "PM 6Y ", "~m": "PM 10Y ", "~n": "Overhaul ",
+      "~o": "Cleaning & Inspec", "~p": "inside drum", "~q": "Confine",
+      "~r": "10400018", "~s": "10311043", "~t": "10330015", "~u": "1002000359", "~v": "103110",
+      "~w": "Nov]", "~x": "Dec]"
+    };
+
+    // ============================================================================
+    // 2. COMPLETE 281 WORKLIST EMBEDDED DATASET (100% OF WL_TA26 ROWS)
+    // ============================================================================
+    const RAW_281_WORKLIST = `
+1|100|0|14|PM|~r526|P3B14|155|58go|~BA-3106A :  PM 6Y. O/H Gear , Change BRG.shaft , Change M/C|[5 ~w Remove;[8 ~w CL;[16 ~w Install Ass'y;[24 ~w ROI
+2|100|0|14|PM|~r527|P3B14|155|58go|~BA-3106B :  PM 6Y. O/H Gear , Change BRG.shaft , Change M/C|[5 ~w Remove;[8 ~w CL;[16 ~w Install Ass'y;[24 ~w ROI
+3|200|0|14|PM|~s378|P3B12|143|9abo|~BA-3201 : ~jManual Cleaning Precontacting pot  + Change gear & Change belt & Change magnetic drive|[24 ~w ROI
+4|200|0|14|PM||P3B13|137|abc|~BD-3201-->R-3200 ~jChange Tube line 1" inline mixer > ( NEW TUBE LINE "A/B")|[10 ~w ROI
+5|400|0|16|PM|~r497|P3B09|225|78aiu|~BA-3401 : ~k> O/H Mech-Seal Agitator  ( Crane 50 T. ) > ~q  ( 07/09/2026 Open Manhold_13:00 น.)|[8 ~w Move;[10 ~w OH SHOP STP;[18 ~w Install;[30 ~w ROI
+6|400|0|15|PM|~r498|P3B09|167|8abcdefghiu|~BA-3401 : PM 6Y+ > Change "NEW" Gear cyclo-drive  > Diviat ~q|[8 ~w Move;[18 ~w Install;[30 ~w ROI
+7|500|0|0|PM|~s383||189|789cdjlv|~BA-3501 : ~jChange "NEW" gear , Change "V" packing seal , Re-Tighten bolt lock blade agitator ( Crane 50 T. )  ( เปิด Manhold 07/11/2026 18:00 น.)|[7 ~w MH;[8 ~w WJ;[9 ~w นั่งร้าน ~q;[13 ~w HPWJ + Inspec Inside Drum;[19 ~w Install;[21 ~w เก็บงาน;[1 ~x ROI
+8|300|0|0|PM|~r467|P3B15|147|8t|~BC-3301 : ~lMinor O/H Comp. Inspec & Change BRG.crank , Change Mech-seal , Change valve , Change lube oil crank  > BY BURCKHARDT|[8 ~w OH Comp.~ 14 วัน;[29 ~w ROI
+9|400|0|15|PM|~r480|P3B09|251|8abcdefghiklmnou|~BC-3401 : PM 10Y+ Inspec journal bearing Turbo & Gear box , O/H Guide vane , Re-check alignment , Change oil tank ( Crane 50 T. )|[8 ~w move line;[18 ~w Install;[30 ~w ROI
+10|600|0|18|PM|~r469||179|fghit|~BC-3671A : ~lO/H & Change Gear cooling By Synergy ~ 14 วัน (Crane 200T.)> ~q|[29 ~w ROI
+11|600|0|18|PM|~r903||1|defghijkl|~B Z-3671A/B/C : Replacement Spray nozzle Cooling Tower " 3 Cell " By Synergy  ~ 14 วัน > ~q|
+12|500|0|0|PM|~s395||161|qrsw|~BC-3501 ~j> Change Oil Gear , Check condition [ Add_M/C Leak]|[2 ~x ROI
+13|600|0|13|PM|~r465||191|4689aegklv|~BC-3601A : PM 6Y+ ~nRefrigeration Compressor + งานรื้อ-หุ้มอินซู Cold ใหม่หมดทั้งตัว > Supv.Johnson Control ~ 15 วัน|[4 ~w รื้ออินซู;[6 ~w ขัดทำสีใหม่;[10 ~w CL;[14 ~w ROI;[16 ~w Coat + งานหุ้มอินซูใหม่;[1 ~x ROI
+14|600|0|13|PM|~r466||191|4689aegklv|~BC-3601B : PM 6Y+ ~nRefrigeration Compressor + งานรื้อ-หุ้มอินซู Cold ใหม่หมดทั้งตัว > Supv.Johnson Control ~ 15 วัน|[4 ~w รื้ออินซู;[6 ~w ขัดทำสีใหม่;[10 ~w CL;[14 ~w ROI;[16 ~w Coat + งานหุ้มอินซูใหม่;[1 ~x ROI
+15|600|0|18|PM|~r471||144|kt|~BCT-3671C : ~k--> 1Y Fill Grease Gear cooling "Hydro-Turbine" > ~q|[29 ~w ROI
+16|800|0|17|PM|~s437||155|123456789abcdefghijklmnotx|~BEX-3801 : ~j  Change soft part oil seal & o-ring , Fill grease , Check coupling , Filter oil , Check All Condition , Change lube oil all tank  "Change die plate No. D18.1223.TRX >> Train 1 + Cutter AMN128-BA"|[29 ~w FN Align.;[3 ~x ROI
+17|800|0|17|PM|~r454||91|23456789abcdefghijklmno|~BEX-3801 : ~kSlide barral & Inspec screw mixer + Change "Spare parts" Mixer Transition Piece + Change Guide bush|[3 ~w L/B;[18 ~w T/B
+18|800|0|17|PM|~r462||9|123456789abcdefghijklmno|~BEX-3801 : ~jChange rotary joint G/P|
+19|800|0|17|PM|10310907323||81|23456789abcdefghijklmno|~BEX-3801 : ~l Change Outside Sleeve Water End|
+20|800|0|2|PM|~r450||163|2tx|~BEX-3801 : ~m ~nMixer Gear "ISHIBASHI"|[2 ~w ~U;[29 ~w FN Align.;[3 ~x ROI
+21|800|0|3|PM|~r451||161|2tx|~BEX-3801 : ~m ~ngear reducer "SEISA"|[2 ~w ~U;[29 ~w FN Align.;[3 ~x ROI
+22|800|0|17|PM|~r452||75|23456789abcdefghijklmno|~BEX-3801 : PM 10Y+  Clean & Diamension check Gear melt pump|[3 ~w L/B;[18 ~w T/B
+23|800|0|17|PM|~s439||155|123456789abcdefghijklmnotx|~BEX-7801 : ~j  Change soft part oil seal & o-ring , Fill grease , Check coupling , Filter oil , Check All Condition , Change lube oil all tank  "Change die plate No.D17.1180.TRX >> Train 2 + Cutter AMN128-BA"|[29 ~w FN Align.;[3 ~x ROI
+24|800|0|17|PM|~r460||91|23456789abcdefghijklmno|~BEX-7801 : ~kSlide barral & Inspec screw mixer + Clean Guide bush + Check Diamension|[3 ~w L/B;[18 ~w T/B
+25|800|0|17|PM|~r463||9|123456789abcdefghijklmno|~BEX-7801 : ~jChange rotary joint G/P|
+26|800|0|17|PM|10310907324||81|23456789abcdefghijklmno|~BEX-7801 : ~l Change Outside Sleeve Water End|
+27|800|0|2|PM|~r456||203|2tx|~BEX-7801 : ~m ~nMixer Gear "ISHIBASHI"|[2 ~w ~U;[29 ~w FN Align.;[3 ~x ROI
+28|800|0|3|PM|~r457||161|2tx|~BEX-7801 : ~m ~ngear reducer "SEISA"|[2 ~w ~U;[29 ~w FN Align.;[3 ~x ROI
+29|800|0|17|PM|~r458||75|23456789abcdefghijklmno|~BEX-7801 : PM 10Y+  Clean & Diamension check Gear melt pump|[3 ~w L/B;[18 ~w T/B
+30|800|0|17|PM|~r455||51|2456789abcdef|~BEX-3801 : ~lO/H HYD Cylinder Screen "REMOVE & INSTALL"|
+31|800|0|17|PM|~r461||51|2456789abcdef|~BEX-7801 : ~lO/H HYD Cylinder Screen  "REMOVE & INSTALL|
+32|500|0|0|PM|~t586||149|defjw|~BF-3504 : ~j Inspec rubber coupling gear & Cleaning Fine Inside > Change Shaft "Machine"|[15 ~w HPWJ + Inspec;[2 ~x ROI
+33|100|0|14|PM|~r572|P3B14|129|klq|~BP-3108A : PM 3Y+ O/H CATL.Feed Pump|[26 ~w ROI
+34|100|0|14|PM|~r573|P3B14|129|klq|~BP-3108B : PM 3Y+ O/H CATL.Feed Pump|[26 ~w ROI
+35|200|0|14|PM|~s544|P3B13|143|9abcdet|~BP-3200 : ~j~npump baby loop > O/H > Bucket pump / Change Mech-seal  ** IE_Support ถอด Valve suct. **|[9 ~w SL/P;[14 ~w AL;[29 ~w ROI
+36|200|0|14|PM|~s546|P3B07|211|9abcdeflt|~BP-3201 : ~jO/H Change mech sal axial pump  > O/H > Bucket pump / Change Mech-seal  ** IE_Support ถอด Valve suct. **|[9 ~w LB;[15 ~w TB;[21 ~w AL;[29 ~w ROI
+37|200|0|14|PM|~s548|P3B08|211|9abcdefmt|~BP-3201 : ~jO/H Change mech sal axial pump  > Change Spare Bucket pump (O/Hไว้แล้ว) / Change Mech-seal  ** IE_Support ถอด Valve suct. **|[9 ~w LB;[15 ~w TB;[22 ~w AL;[29 ~w ROI
+38|300|0|1|PM|~r664||225|89nou|~BP-3301A : PM 6Y+  Minor O/H. KSB PUMP (Crane 160T.) > Critical work BY KSB|[9 ~w Minor O/H P-3301A ~18 วัน;[30 ~w ROI
+39|300|0|1|PM|~r464||225|89nou|~BP-3301B : PM 10Y+  Major O/H. KSB PUMP (Crane 160T.) > Critical work BY KSB|[9 ~w Major O/H P-3301B ~18 วัน;[30 ~w ROI
+40|300|0|11|PM|~r571||153|cdefghijkv|~BP-3304 : ~kO/H REFLUX PUMP > BY MTE|[14 ~w MTE OH @Shop;[1 ~x ROI
+41|400|0|11|PM|~r472||145|cdefghijkv|~BP-3401 : ~kO/H  R-3401 ICW CIRCULATION PUMP > BY MTE|[14 ~w MTE OH @Shop;[1 ~x ROI
+42|600|0|18|PM|~s596||177|67jkt|~BP-3671C : ~lO/H PUMP COOLING  (Crane 200T.) > BY PSS|[7 ~w O/H P-3671C ~ 12 วัน;[29 ~w ROI
+43|100|0|14|PM|~s516|P3B01|1|j|~AP3102 [1Y] > ~Q|
+44|100|0|14|PM|~s536|P3B02|1|j|~AP3110 [1Y] > ~Q|
+45|100|0|14|PM|~s539|P3B06|1|j|~AP3112 [1Y] > ~Q|
+46|100|0|14|PM|~s540|P3B06|1|j|~AP3113 [1Y] > ~Q|
+47|100|0|14|PM|~s541|P3B04|1|j|~AP3114 [1Y] > ~Q|
+48|100|0|14|PM|~s542|P3B06|1|j|~AP3115 [1Y] > ~Q|
+49|300|0|0|PM|~s576||1|m|~AP3303 [1Y] > ~Q|
+50|800|0|17|PM|~s602||1|cdef|~AP-3802 [1Y] > Inspec lovejoy Coupling|
+51|800|0|17|PM|~s603||17|cdef|~AP3803A [1Y] > ~R|
+52|800|0|17|PM|~s604||17|cdef|~AP3803B [1Y] > ~R|
+53|800|0|17|PM|~s605||1|cdef|~AP3804 [1Y] > ~S|
+54|800|0|17|PM|~s606||1|cdef|~AP3805 [1Y] > ~S|
+55|800|0|17|PM|~s621||1|fghi|~AP-7802 [1Y] > Inspec lovejoy Coupling|
+56|800|0|17|PM|~s622||17|fghi|~AP7803A [1Y] > ~R|
+57|800|0|17|PM|~s623||17|fghi|~AP7803B [1Y] > ~R|
+58|800|0|17|PM|~s624||1|fghi|~AP7804 [1Y] > ~S|
+59|800|0|17|PM|~s625||1|fghi|~AP7805 [1Y] > ~S > Add_M/C Pump leak|
+60|800|0|0|PM|~r517||153|stuw|~BRF-3802 : ~jO/H rotary valve "NDEFlush N2 ไม่เข้า" > [Add_O/H Rotary Valve]|[2 ~x ROI
+61|800|0|17|PM|10311101367||1|j|~AS3802 [1Y] > ~W|
+62|800|0|17|PM|||1|j|~AS7802 [1Y] > ~W|
+63|800|0|12|PM|~r506||147|37bn|~BS-3803 : ~k~X|[3 ~w ~V;[7 ~w ROI PT;[11 ~w Install & Ass'y;[23 ~w ROI
+64|800|0|12|PM|~r507||147|39abn|~BS-7803 : ~k~X|[3 ~w ~V;[9 ~w ROI PT;[11 ~w Install & Ass'y;[23 ~w ROI
+65|800|0|12|PM|~r500||145|anw|~BS-3804 : ~kO/H Pellet Vibration screen + Change Head Drive|[10 ~w ~V;[23 ~w Ass'y part;[2 ~x ROI
+66|800|0|12|PM|~r501||145|aenw|~BS-7804 : ~kO/H Pellet Vibration screen + Change Head Drive (ต้อง O/H_ตัวเก่า 1 SET)|[10 ~w ~V;[14 ~w O/H Head drive @ shop;[23 ~w Ass'y part;[2 ~x ROI
+67|800|0|11|PM|~r532||131|5678efgw|~BW-3803 : ~kO/H Powder metering feeder|[2 ~x ROI
+68|800|0|11|PM|~r533||131|5678efgw|~BW-3804 : ~kO/H SSB metering feeder|[2 ~x ROI
+69|800|0|11|PM|~r534||131|5678efgw|~BW-3806 : ~kO/H Silica metering feeder|[2 ~x ROI
+70|800|0|11|PM|~r535||131|89abhijw|~BW-7803 : ~kO/H Powder metering feeder|[2 ~x ROI
+71|800|0|11|PM|~r536||131|89abhijw|~BW-7804 : ~kO/H SSB metering feeder|[2 ~x ROI
+72|800|0|11|PM|~r537||131|89abhijw|~BW-7806 : ~kO/H Silica metering feeder|[2 ~x ROI
+73|500|0|5|PM|~r530||57|9ac|~BT-3503A : ~l> Change molecular sieve|
+74|500|0|5|PM|~r531||57|9ac|~BT-3503B : ~l> Change molecular sieve|
+75|800|0|11|PM|~s668||17|mn|~BSL-3803A : ~kChange packing & Inspec slide gate valve|
+76|800|0|11|PM|~s669||17|op|~BSL-7803B : ~kChange packing & Inspec slide gate valve|
+77|200|0|14|PM|~r665|P3B07|2|acj|~B~lOH Manual piston valve loop Reactor R-3201 / R-3202 _ 15 Tag.|[12 ~w O/H @ W/S ST_IE support Quality
+78|200|1|12|PM|~r585||81|hkmo|~BF-3201B : ~kChange propylene guard filter|[17 ~w L/B;[20 ~w C/FT;[24 ~w T/B
+79|300|1|12|PM|~s440|P3B10|9|2jl|~AF3301 [1Y] > ~T  + Swing Blind "By TSP"  ( 02/11/2026_09:00 น. กลับ Blind Isolate loop)|[19 ~w C/BF
+80|500|1|12|PM|~s441||25|dgj|~AF3502 [1Y] D-3506 > ~T|[16 ~w HPWJ;[19 ~w Ass'y
+81|800|1|12|PM|~s442||1|i|~AF3802 [1Y] > ~T + Swing line vent|[18 ~w C/BF
+82|800|1|12|PM|~s443||1|5eg|~AF3803 [1Y] > ~T|[14 ~w C/BF
+83|800|1|12|PM|~s444||17|3|~AF3822 [1Y] > ~T|
+84|800|1|12|PM|~s445||17|4|~AF3824 [1Y] > ~T|
+85|800|1|12|PM|~s446||17|5|~AF3825 [1Y] > ~T|
+86|800|1|12|PM|~s450||17|6|~AF7822 [1Y] > ~T|
+87|800|1|12|PM|~s451||17|7|~AF7824 [1Y] > ~T|
+88|800|1|12|PM|~s452||17|8|~AF7825 [1Y] > ~T|
+89|800|1|12|PM|~s720||17|g|~AZ3822 [1Y] > ~T|
+90|800|1|12|PM|~s721||17|g|~AZ3823 [1Y] > ~T|
+91|800|1|12|PM|~s722||17|8|~AZ3824 [1Y] > ~T  (ไม่เปลี่ยน_เนื่องจากไม่ได้ใช้งาน)|
+92|800|1|12|PM|~v29311||17|h|~BChange DW GUARD FILTER F-3809  [1Y]|
+93|800|1|12|PM|~v29313||17|9|~BChange DW GUARD FILTER F-7809  [1Y]|
+94|800|1|12|PM|~v29312||25|h|~BChange LS GUARD FILTER F-3810  [1Y]|
+95|800|1|12|PM|~v29314||25|9|~BChange LS GUARD FILTER F-7810  [1Y]|
+96|800|1|17|PM|~v88341||1|k|~BClean filter F-3808A/B [1Y]|
+97|800|1|17|PM|~v88342||1|k|~BClean filter F-7808A/B [1Y]|
+98|800|1|17|PM|~v88343||1|k|~BChange filter F-3820A/B [1Y]|
+99|800|1|17|PM|~v88344||1|k|~BChange filter F-7820A/B [1Y]|
+100|100|1|14|PM|~r574|P3B01|1|k|~BChange AT CATL.filter F-3101>P-3101A/B/C [1Y ]|
+101|100|1|14|PM|~r575|P3B02|1|k|~BChange OF CATL.filter F-3104A/B/C>D-3110A/B/C [1Y]|
+102|100|1|14|PM|~r576|P3B06|1|k|~BChange PRESSURIZATION OIL.filter F-3106A/B>P-3107A/B [1Y ]|
+103|100|1|14|PM|~r577|P3B06|1|k|~BChange METERING OIL.filter F-3107A/B>P-3108A/B [1Y ]|
+104|100|1|14|PM|~r578||1|k|~BChange LIQUID ADDITIVE.filter F-3109>P-3110 [1Y ]|
+105|100|1|14|PM|~r579||1|k|~BChange LIQUID ADDITIVE.filter F-3110>P-3111A/B [1Y ]|
+106|100|1|14|PM|~r580|P3B06|1|k|~BChange OIL.filter F-3112>P-3113 [1Y ]|
+107|100|1|14|PM|~r581|P3B06|1|k|~BChange GREASE.filter F-3114>P-3114 [1Y ]|
+108|100|1|14|PM|~r582|P3B06|1|k|~BChange OIL.filter F-3115>P-3115 [1Y ]|
+109|500|1|12|PM|10310999408||25|i|~BChange STEAM FILTER F-3503A [1Y]|
+110|700|1|12|PM|~r583||17|l|~BF-3703 : ~kCleaning PROPYLENE GUARD.filter dryer|
+111|700|1|12|PM|~r584||17|m|~BF-3705 : ~kChange PROPYLENE .filter dryer|
+1|100|2|9|CL|~r597|P3B14|152|8e|~BD-3106A : ~kHPWJ & Inspec CATL.Drum ~M|[8 ~w HPWJ;[14 ~w ROI
+2|100|2|9|CL|~r598|P3B14|152|8e|~BD-3106B : ~kHPWJ & Inspec CATL.Drum ~M|[8 ~w HPWJ;[14 ~w ROI
+3|100|2|9|CL|~t737|P3B14|17|c|~BZ-3106A/B : ~j~D pot Vent D-3106A/B + inlet line from D-3106A/B|[12 ~w HPWJ
+4|100|2|9|CL|~t738|P3B01|17|9|~BD-3103 : ~j ~D pot + line vent to ATM|[9 ~w HPWJ
+5|100|2|9|CL|~t557|P3B14|153|adf|~BD-3108AB ->D-3201 : ~j ~C Line MUD #100|[10 ~w HPWJ;[13 ~w ROI;[15 ~w Ass'y
+6|200|2|9|CL|~t740|P3B07|137|9eh|~BR-3200>R-3201 : ~jChange line slurry 1" TK-Feed > "Recond"|[14 ~w ROI
+7|200|2|9|CL|~t559 / ~u7|P3B13|155|abfh|~BR-3200 : ~j~C & Inspec borescope Loop line reactor 8"~M|[11 ~w HPWJ;[15 ~w ROI
+8|200|2|9|CL|~r805|P3B13|0|bcdefghijkl|~BR-3200 : ~kHPWJ Dump out line~M > รอผลิต Confirm|
+9|200|2|9|CL|~r806|P3B07|0|bcdefghijkl|~BR-3201 : ~kHPWJ Dump out line~M > รอผลิต Confirm|
+10|200|2|9|CL|~r807|P3B08|0|bcdefghijkl|~BR-3202 : ~kHPWJ Dump out line~M > รอผลิต Confirm|
+11|200|2|9|CL|~t741|P3B07|17|d|~BZ-3205A/B : ~j~C & Inspec line sampling pot R-3201 + Clear powder loop line reactor R-3201 (ด้านล่าง)|[13 ~w HPWJ
+12|300|2|9|CL|~t742|P3B03|17|f|~BZ-3302A/B : ~j~C & Inspec line sampling pot D-3301 + Clear powder loop line reactor R-3202 (ด้านล่าง)|[15 ~w HPWJ
+13|300|2|9|CL|~r522|P3B15|49|bck|~BD-3304 : ~kHPWJ Cleaning  (Crane 200T) / Change demister|[12 ~w HPWJ
+14|300|2|9|CL|~r523|P3B15|89|cdeij|~BD-3311 : ~kHPWJ Cleaning / Change demister|[12 ~w L/B;[14 ~w HPWJ;[19 ~w T/B
+15|300|2|9|CL|~r524|P3B15|89|cdeij|~BD-3312 : ~kHPWJ Cleaning / Change demister|[12 ~w L/B;[14 ~w HPWJ;[19 ~w T/B
+16|300|2|9|CL|~t560 / ~u2||203|abegh|~BE-3303"C" : ~jDrop & HPWJ Exchanger propylene scrubber > Liftting "chain hoist" ใช้งานตัวเดิม|[10 ~w L/B;[11 ~w Drop HPWJ;[14 ~w ROI;[16 ~w Ass'y;[17 ~w T/B
+17|300|2|9|CL|~t561||155|defghj|~B~jHPWJ Cleaning line 1" SL-30014 (100 m.) under E-3303 (ใส้ไก่)~L|[14 ~w HPWJ;[17 ~w ROI
+18|300|2|9|CL|~s440||9|2l|~BF-3301: ~jInsert Blind & De-Blind Isolate Support OPE : (02/11/2026_09:00 น. กลับ Blind Isolate loop)|
+19|300|2|9|CL|~r589 / ~u2||169|bcik|~BE-3304 > T-3302 : ~k ~E~L|[12 ~w HPWJ;[18 ~w ROI;[20 ~w Install
+20|300|2|9|CL|~r792 / ~u2||147|fgjl|~BE-3305 : ~k ~E~L|[16 ~w HPWJ;[19 ~w ROI;[21 ~w Install
+21|300|2|9|CL|~r793 / ~u7||153|abchlm|~BT-3301 : ~k~o tray 23 set  > ROI ~q|[12 ~w WJ Out;[17 ~w ROI
+22|300|2|9|CL|~r587 / ~u7||185|bchlm|~BT-3302 : ~k~o tray 21 set  (Crane 200T)  > ROI ~q|[12 ~w WJ Out;[17 ~w ROI
+23|300|2|9|CL|~r816||27|h|~B~j~C Suction strainer C-3301|[17 ~w HPWJ
+24|400|2|9|CL|~r808|P3B09|241|8abcdefghijklmno|~BE-3401A : ~k~D "CIRCULATION GAS COOLER A" ( Crane 200 T. ) > Critical work + High risk|[8 ~w L/B;[14 ~w HPWJ_Auto-feed;[18 ~w ROI;[23 ~w T/B
+25|400|2|9|CL|~r809|P3B09|249|8abcdefghijklmno|~BE-3401B : ~k~D "CIRCULATION GAS COOLER A" ( Crane 200 T. ) > Critical work + High risk|[8 ~w L/B;[14 ~w HPWJ_Auto-feed;[18 ~w ROI;[23 ~w T/B
+26|400|2|9|CL|~r480|P3B09|123|89efhkm|~BC-3401 > R-3401 : ~kRemove line disc."เขาควาย"  ~C & Inspec ( Crane 50 T. )|[8 ~w L/B;[9 ~w ติด Project E-3301;[15 ~w L/B;[17 ~w เข้าถอด HPWJ;[20 ~w Install;[22 ~w T/B
+27|400|2|9|CL|~t565|P3B09|65|78ailmn|~BR-3401 : ~jOpen manhold Manual Cleaning TOP & BOTTOM grid > Manual _~q  ( 07/11/2026 Open Manhold_13:00 น.)|[7 ~w MH;[8 ~w Move;[10 ~w Manual clean;[18 ~w Install;[22 ~w MH;[23 ~w T/B
+28|400|2|9|CL|~t566|P3B09|155|agjk|~BR-3401 : ~j~C & Inspec line Pot PD ทางลง Common Z-3401A/B --> Line 8" F-3301~L|[10 ~w Remove;[16 ~w HPWJ;[19 ~w ROI;[20 ~w Install
+29|400|2|9|CL|~t735|P3B09|137|agjk|~BZ-3401A/B ~j~D + Inspec line Balance + Line Powder ทางลง Common Z-3401A/B ~L|[10 ~w Remove;[16 ~w HPWJ;[19 ~w ROI;[20 ~w Install
+30|400|2|9|CL|~t536|P3B09|129|chj|~BE-3402 : ~kChange Exchanger "NEW" Complete set|[12 ~w Remove;[17 ~w ROI;[19 ~w Install
+31|400|2|9|CL|~t694|P3B09|177|cehj|~BE-3404 : ~k~C & Coating tube sheet|[12 ~w Remove;[14 ~w HPWJ @ TSP;[17 ~w ROI;[19 ~w Install
+32|500|2|9|CL|~t563 / VC||153|789bfhik|~BD-3501 : ~j ~C ~p + Inspec sparging ring > ~q ( เปิด Manhold 07/11/2026 18:00 น.)|[7 ~w MH;[8 ~w WJ;[9 ~w นั่งร้าน Conf.;[11 ~w HPWJ_IN;[15 ~w ROI;[18 ~w FN WJ
+33|500|2|9|CL|~t564 / VC||153|789dfh|~BD-3502 : ~j ~C inside dryer + Inspec plate patition > ~q ( เปิด Manhold 07/11/2026 18:00 น.)|[7 ~w MH;[8 ~w WJ;[9 ~w HPWJ_IN;[13 ~w ROI;[15 ~w FN WJ
+34|500|2|9|CL|~t562||25|cfl|~BE-3503 : ~j~C nitrogen heater "Fin Plate"|[12 ~w Remove;[15 ~w HPWJ;[21 ~w Install
+35|500|2|9|CL|~t585||25|chl|~BD-3506 > F-3502 ~j~o hopper  + Clean All line vent loop #500|[12 ~w Remove;[17 ~w HPWJ;[21 ~w Install
+36|500|2|9|CL|~t567||25|cgl|~BS-3501 : ~j~C & Inspec Cyclone + Line 12" > T-3501|[12 ~w Remove;[16 ~w HPWJ;[21 ~w Install
+37|500|2|9|CL|~t568||25|cgl|~BS-3502 : ~j ~C & Line Cyclone 22" > T-3502|[12 ~w Remove;[16 ~w HPWJ;[21 ~w Install
+38|500|2|9|CL|~r810||153|dfik|~BE-3506 : ~k ~E~L "ADD WORK"|[13 ~w Remove;[15 ~w HPWJ;[18 ~w ROI;[20 ~w Install
+39|500|2|9|CL|~r588 / ~u2||185|cdjl|~BT-3501>E-3501 : ~k~E  (Crane 200T)~L|[13 ~w WJ Out;[19 ~w ROI
+40|500|2|9|CL|~r586||185|cdjl|~BT-3501 : ~k~o tray 15 set  (Crane 200T) > ROI ~q|[13 ~w WJ Out;[19 ~w ROI
+41|500|2|9|CL|~r525||185|cdik|~BT-3502 : ~k~o tray 8 set  (Crane 200T) > ROI ~q / Change demister|[13 ~w WJ Out;[18 ~w ROI
+42|500|2|9|CL|~r817||17|fgi|~B~j~C Suction strainer C-3501|[16 ~w CL
+43|600|2|9|CL|~r601||49|89abcdefghijklmnopqrstu|~BLINE FLARE > MOC : ~jIsolate Blind line Flare 26" [เครน 50T]   (08/11/2026_10:00 น. กลับ Blind) ( กลับ Blind คืน loop 30/11/2026)|
+44|600|2|9|CL|~r811||25|89bf|~BD-3601 : ~kClear powder > ~D Inside drum|[9 ~w Open MH;[11 ~w HPWJ;[15 ~w Install
+45|600|2|9|CL|~r812||25|89bf|~BD-3602 : ~kClear powder > ~D Inside drum|[9 ~w Open MH;[11 ~w HPWJ;[15 ~w Install
+46|600|2|9|CL|~r813||25|89bf|~BD-3603 : ~kClear powder > ~D Inside drum|[9 ~w Open MH;[11 ~w HPWJ;[15 ~w Install
+47|600|2|9|CL|~r794||16|8ae|~BZ-3671ABC : ~k~D SUM Screen cooling|[8 ~w Scaff.;[10 ~w Move by Hoist HPWJ;[14 ~w Move Scaff.
+48|600|2|9|CL|~r814||0|k|~BZ-3671ABC : ~kChange filter + Clean บ่อพัก LC ก่อนเข้า CW|[20 ~w HPWJ บ่อ LC
+49|600|2|9|CL|~r815||16|8bo|~BZ-3671ABC : ~kCleanning ดูด sludge ในบ่อ Cooling > ~q|[8 ~w Scaff.;[11 ~w Clean Sludge Inside;[24 ~w Move Scaff.
+50|800|2|9|CL|~t569||17|46a|~BC-3803 : ~j~h S-3832|[4 ~w Remove;[6 ~w HPWJ;[10 ~w Install
+51|800|2|9|CL|~t570||17|46a|~BC-7803 : ~j~h S-7832|[4 ~w Remove;[6 ~w HPWJ;[10 ~w Install
+52|800|2|9|CL|~t743||17|346a|~BD-3814 : ~j~Y|[4 ~w WJ Out;[6 ~w WJ In_Conf.;[10 ~w Close loop
+53|800|2|9|CL|~t744||17|346a|~BD-7814 : ~j~Y|[4 ~w WJ Out;[6 ~w WJ In_Conf.;[10 ~w Close loop
+54|800|2|9|CL|~t745||16|348|~BD-3819 : ~j~Z|[4 ~w WJ Out;[8 ~w Install
+55|800|2|9|CL|~t746||16|348|~BD-7819 : ~j~Z|[4 ~w WJ Out;[8 ~w Install
+56|800|2|9|CL|~t747||145|57bc|~BM-3803 : ~j~C screw feeder + Line Balance & Line vent All|[5 ~w Remove;[7 ~w HPWJ;[11 ~w ROI;[12 ~w Install
+57|800|2|9|CL|~t748||145|57bc|~BM-7803 : ~j~C screw feeder + Line Balance & Line vent All|[5 ~w Remove;[7 ~w HPWJ;[11 ~w ROI;[12 ~w Install
+58|800|2|9|CL|~t749||145|68cd|~BM-3804 : ~j~C HOMO screw feeder + Line Balance & Line vent All|[6 ~w Remove;[8 ~w HPWJ;[12 ~w ROI;[13 ~w Install
+59|800|2|9|CL|~t750||145|68cd|~BM-7804 : ~j~C HOMO screw feeder + Line Balance & Line vent All|[6 ~w Remove;[8 ~w HPWJ;[12 ~w ROI;[13 ~w Install
+60|800|2|9|CL|~t753||19|35g|~BS-3803 : ~j~C  inside pellet dryer + ถอด Screen clear fines > ใช้น้ำ DW Clean|[3 ~w Remove;[5 ~w CL;[16 ~w Install
+61|800|2|9|CL|~t754||19|35j|~BS-3803 : ~j~C  inside pellet dryer + ถอด Screen clear fines > ใช้น้ำ DW Clean|[3 ~w Remove;[5 ~w CL;[19 ~w Install
+62|800|2|9|CL|~t751||17|5ad|~BW-3804 --> M-3803 : ~j~d T.1  ( Manual ) > Manual Buff|[10 ~w Manual buff;[13 ~w Install
+63|800|2|9|CL|~t752||17|5ad|~BW-7804 --> M-7803 : ~j~d T.2  ( Manual ) > Manual Buff|[10 ~w Manual buff;[13 ~w Install
+64|800|2|9|CL|~t755||16|fgj|~BS-3831 : ~j~D cyclone / PT Support & Welding crack|[16 ~w HPWJ;[19 ~w Welding
+65|800|2|9|CL|~t756||16|fgj|~BS-7831 : ~j~D cyclone / PT Support & Welding crack|[16 ~w HPWJ;[19 ~w Welding
+66|800|2|9|CL|~t757||17|89c|~BTK-3801 ~j~C feed hopper|[9 ~w HPWJ
+67|800|2|9|CL|~t758||17|89c|~BTK-7801 ~j~C feed hopper|[9 ~w HPWJ
+68|800|2|9|CL|~t759||19|569|~BTK-3804 : ~j~C ~p|[6 ~w HPWJ
+69|800|2|9|CL|~t760||19|569|~BTK-7804 : ~j~C ~p|[6 ~w HPWJ
+70|800|2|9|CL|~r795||19|67a|~BTK-3806 : ~k~C ~p + Big bag unloading station|[7 ~w HPWJ
+71|800|2|9|CL|~r796||19|67a|~BTK-7806 : ~k~C ~p + Big bag unloading station|[7 ~w HPWJ
+72|800|2|9|CL|~r797||0|8|~BTK-3802 : ~k~C ~p  > PdM Support Borescope > ~q  > ยกลิก W/L|
+73|800|2|9|CL|~r798||0|8|~BTK-3803 : ~k~C ~p  > PdM Support Borescope > ~q  > ยกลิก W/L|
+74|800|2|9|CL|~v92890||19|g|~B~kQPA_Inspection item section all .800 > List By OPE  --> [Reverse body SL-7831F,SL-7834F,SL-7836F]|[16 ~w SL-7831F,SL-7834F,SL-7836F
+75|800|2|9|CL|~v92891||0|8|~B~kPipe roughness : Intake and transfer and blending line Train1 and Train2 > List By OPE  --> Postpone next CLSD2027 > ยกลิก W/L|
+76|900|2|9|CL|~r591||17|2357|~BZ-3901A : ~j ~D inside SSB Drum Blender > Additive building > ~q|[3 ~w WJ Out;[5 ~w HPWJ In
+77|900|2|9|CL|~r592||17|2357|~BZ-3901B : ~j ~D inside SSB Drum Blender > Additive building > ~q|[3 ~w WJ Out;[5 ~w HPWJ In
+78|900|2|9|CL|~r593||17|2357|~BZ-3901C : ~j ~D inside SSB Drum Blender > Additive building > ~q|[3 ~w WJ Out;[5 ~w HPWJ In
+79|900|2|9|CL|~r594||0|27|~BTK-3902A : ~j ~D inside SSB Feed Hopper > Additive building|
+80|900|2|9|CL|~r595||0|27|~BTK-3902B : ~j ~D inside SSB Feed Hopper > Additive building|
+81|900|2|9|CL|~r596||0|27|~BTK-3902C : ~j ~D inside SSB Feed Hopper > Additive building|
+1|200|3|8|CL|~r481||49|9abcdefghijklm|~BE-3208A : ~l~J|
+2|200|3|8|CL|~r482||49|9abcdefghijklm|~BE-3208B : ~l~J|
+3|200|3|8|CL|~r483||49|9abcdefghijklm|~BE-3208C : ~l~J|
+4|200|3|8|CL|~r484||49|9abcdefghijklm|~BE-3209 : ~l~J|
+5|400|3|8|CL|~r485||49|9abcdefghijklmno|~BE-3411 : ~l~J|
+6|500|3|8|CL|~r493||33|9abcdefghijklmno|~BE-3502A : ~l~J|
+7|500|3|8|CL|~r494||33|9abcdefghijklmno|~BE-3502B : ~l~J|
+8|600|3|8|CL|~r492||33|9abcdefghijklmno|~BE-3605 : ~l~J|
+9|800|3|8|CL|~r490||33|3456789abcdefghijklmno|~BE-3808 : ~l~K|
+10|800|3|8|CL|~r491||33|3456789abcdefghijklmno|~BE-7808 : ~l~K|
+11|800|3|8|CL|~r486||49|3456789abcdefghijklmno|~BE-3804A : ~k~K|
+12|800|3|8|CL|~r487||49|3456789abcdefghijklmno|~BE-3804B : ~k~K|
+13|800|3|8|CL|~r488||49|3456789abcdefghijklmno|~BE-7804A : ~k~K|
+14|800|3|8|CL|~r489||49|3456789abcdefghijklmno|~BE-7804B : ~k~K|
+1|200|4|10|CL|~u7 / ~t559|P3B13|155|abfh|~BR-3200 : ~otion loop reactor Column + Coating painting~L|[11 ~w HPWJ;[15 ~w ROI
+2|300|4|10|CL|~u2 / ~r819||153|67ac|~BE-3302 : ~G|[7 ~w Mob to Repair shop;[10 ~w ROI;[12 ~w Install
+3|300|4|10|CL|~u2 / ~t560||203|abeg|~BE-3303"C" : ~F|[10 ~w L/B;[11 ~w Drop HPWJ;[14 ~w ROI;[16 ~w T/B
+4|300|4|10|CL|~u2 / ~r589||185|bcik|~BE-3304 : ~I T-3302|[12 ~w HPWJ;[18 ~w ROI;[20 ~w Install
+5|300|4|10|CL|~u2 / ~r792||185|fgjl|~BE-3305 : ~F|[16 ~w HPWJ;[19 ~w ROI;[21 ~w Install
+6|300|4|10|CL|~u2 / ~r820|P3B15|153|abcfh|~BE-3306 : ~F|[12 ~w HPWJ;[15 ~w ROI;[17 ~w Install
+7|500|4|10|CL|~t563||153|789bfhik|~BD-3501 : ~otion Steamer Drum > ~q|[7 ~w MH;[8 ~w WJ;[9 ~w นั่งร้าน Conf.;[11 ~w HPWJ_IN;[15 ~w ROI;[18 ~w FN WJ
+8|500|4|10|CL|~t564||153|789dfh|~BD-3502 : ~otion loop Dryer > ~q|[7 ~w MH;[8 ~w WJ;[9 ~w HPWJ_IN;[13 ~w ROI;[15 ~w FN WJ
+9|500|4|10|CL|~u2 / ~r588||185|cdjl|~BE-3501 : ~I T-3501|[13 ~w WJ Out;[19 ~w ROI
+10|500|4|10|CL|~u2 / ~r821||153|defjl|~BE-3504 : ~H|[15 ~w HPWJ;[19 ~w ROI
+11|500|4|10|CL|~u2 / ~r822||153|deik|~BE-3505 : ~F|[14 ~w HPWJ;[18 ~w ROI
+12|600|4|10|CL|~u2 / ~r823||155|adgik|~BE-3601A : ~H|[10 ~w รื้ออินซู;[13 ~w HPWJ;[16 ~w ROI;[18 ~w ทำสี;[20 ~w หุ้มอินซูใหม่
+13|600|4|10|CL|~u2 / ~r824||155|adgik|~BE-3601B : ~H|[10 ~w รื้ออินซู;[13 ~w HPWJ;[16 ~w ROI;[18 ~w ทำสี;[20 ~w หุ้มอินซูใหม่
+14|800|4|10|CL|~u2 / ~r827||145|2368|~BE-3803 : ~G|[3 ~w HPWJ;[6 ~w ROI;[8 ~w Install
+15|800|4|10|CL|~u2 / ~r828||145|2368|~BE-7803 : ~G|[3 ~w HPWJ;[6 ~w ROI;[8 ~w Install
+16|800|4|10|CL|~u2 / ~r829||153|3479|~BE-3805 : ~I|[4 ~w HPWJ;[7 ~w ROI;[9 ~w Install
+17|800|4|10|CL|~u2 / ~r830||153|3479|~BE-7805 : ~I|[4 ~w HPWJ;[7 ~w ROI;[9 ~w Install
+18|800|4|10|CL|~u2||0|8|~BE-3809 : ~F  > ยกลิก W/L|
+19|800|4|10|CL|~u2||0|8|~BE-7809 : ~F  > ยกลิก W/L|
+20|300|4|10|CL|~u7 / ~r793||185|abchlm|~BT-3301 : ~o tray 23 set > ~q|[12 ~w WJ Out;[17 ~w ROI
+21|300|4|10|CL|~u7 / ~r587||185|bchlm|~BT-3302 : ~o tray 21 set > ~q|[12 ~w WJ Out;[17 ~w ROI
+22|400|4|10|CL|~u7 / ~r831||0|8|~BT-3402 : Cleaning & Check packing > (Check Casing แทน)|
+23|800|4|10|CL|10020002882 / ~r832||147|235mnp|~BTK-7831F : SILO Inspection > Isolate , Cleaning 3D , Dis-Ass'y+Ass'y , Support gasket|[2 ~w Move;[3 ~w HPWJ;[5 ~w ROI_Main Support;[23 ~w FN-HPWJ;[25 ~w Close
+24|600|4|10|CL|~u2 / ~r825||155|adgik|~BE-3602A : ~H|[10 ~w รื้ออินซู;[13 ~w HPWJ;[16 ~w ROI;[18 ~w ทำสี;[20 ~w หุ้มอินซูใหม่
+25|600|4|10|CL|~u2 / ~r826||155|adgik|~BE-3602B : ~H|[10 ~w รื้ออินซู;[13 ~w HPWJ;[16 ~w ROI;[18 ~w ทำสี;[20 ~w หุ้มอินซูใหม่
+26|500|4|10|CL|~u2 / ~r810||153|dfik|TA26 E-3506 : ~H  > ADD WORK|[13 ~w Remove;[15 ~w HPWJ;[18 ~w ROI;[20 ~w Install
+27|400|4|10|CL|~u2 / ~r928||153|cejl|TA26 E-3403 ( T-3402 ) : ~H  > ADD WORK|[12 ~w Remove;[14 ~w HPWJ;[19 ~w ROI;[21 ~w Install
+1|900|5|7|CM|~v88646||16|267|~BNDT-เชื่อมซ่อม Z-3901A Dec25(RL<1.) > HW-I > ออก PO. เรียบร้อยแล้ว|[2 ~w CL
+2|900|5|7|CM|~v88647||16|267|~BNDT-เชื่อมซ่อม Z-3901B Dec25(RL<1.) > HW-I > ออก PO. เรียบร้อยแล้ว|[2 ~w CL
+3|900|5|7|CM|~v88648||16|267|~BNDT-เชื่อมซ่อม Z-3901C Dec25(RL<1.) > HW-I > ออก PO. เรียบร้อยแล้ว|[2 ~w CL
+4|600|5|0|CM|~v50005||1|l|~BChange butterfly valve passing E-3605 > สั่งซื้อของไว้แล้ว (ของมาส่งแล้ว)|
+5|800|5|17|PM|~v50066||161|lmnoptx|~BGear Overruning clutch  "Oil leak SHAFT"|[29 ~w FN Align.;[3 ~x ROI
+6|400|5|7|CM|~v07566||25|cd|~B LINE PR 1",2",3" บริเวณ E-3407 High corosion FL8 > HW-I Clamp stop leak ไว้ จำนวน 3 Set > ~N|
+7|600|5|7|CM|~v50119||17|no|~BLINE PTW 3" Leak บริเวณแถว Blowdowm > HW-I Clamp stop leak ไว้ > ~N|
+8|800|5|7|CM|~v87432||17|no|~BLine PTW 2" Leak ท้าย Silo "H" > HW-I Rapp-it stop leak ไว้ > ~N|
+9|600|5|7|CM|~v87548||1|cd|~BRapp-It Line Drain Cooling Cell C > HW-I Rapp-it stop leak ไว้ > ~N|
+10|100|5|7|CM|~v04014||1|ef|~B Line 6" Off gas PR pipe line welding defect (ติดรั้ว MOC) > HW-I Rapp-it stop leak ไว้ > ~N|
+11|800|5|7|CM|~v03940||0|8|~BCold bonding work for TK-3802 Powder Silo seam weld defect > HW-I Cold bonding coating ไว้  > ยกลิก W/L|
+12|300|5|7|CM|10310910192||17|no|~BLine PTW 3" Main pipe rack leak (ตรง E-3303) > HW-I Clamp stop leak ไว้ > ~N|
+13|800|5|7|CM|~v87432||17|no|~BLine PTW 2" Main Pipe Rack Leak_SILO "D" > HW-I Clamp stop leak ไว้ > ~N|
+14|500|5|7|CM|10310959896||25|gh|~BLine Brine Header 2" Pipe line high corosion (บริเวณ E-3504) > HW-I Clamp stop leak ไว้ จำนวน 4 Set > ~N|
+15|200|5|14|CM|~v88219||17|jkl|~BCheck Valve H2 R-3201/R-3202Passing > สั่งซื้อของไว้แล้ว|
+16|600|5|7|CM|~v89533||17|cd|~BLine LV-6701 High Corosion line 6" , 4" > HW-I > ~N|
+17|600|5|7|CM|~v91638||17|no|~BLine PTW Leak Corosion "leak" ตรง E-3605 > HW-I > Rapp-it stop leak ไว้ > ~O|
+18|600|5|7|CM|~v91838||17|no|~BLine CW Discharge P-3673 Leak  > HW-I > Rapp-it stop leak ไว้ > ~O|
+19|300|5|7|CM|~v92881||17|no|~BLine Fire water 4" DV-004 Line Leak ( 2 ตำแหน่ง ตรงเหนือแถวๆ P-3302A/B) > HW-I Clamp stop leak ไว้ > ~O|
+20|800|5|7|CM|~v92418||25|klm|~BTrain1แจ้งงานเปลี่ยนท่อ_Dec26(RL<1) > สั่ง Mat's แล้ว~P|
+21|800|5|7|CM|~v92419||25|klm|~BTrain2แจ้งงานเปลี่ยนท่อ_Dec26(RL<1) > สั่ง Mat's แล้ว~P|
+22|600|5|7|CM|10300078900||9|l|~BWD.Valve Bypass MS Trap ข้าง Aircom > สั่ง Valve แล้ว~P|
+23|200|5|14|CM|~v92661|P3B13|1|ef|~BValve drain Z-3200 passing > สั่ง Valve แล้ว > FAB line มาไว้เปลี่ยนเอง|
+24|700|5|0|CM|~v94149||17|j|~Bแก้ไขหน้าแปลน PR D-3703B leak_VOCs > Change Gasket > เปลี่ยนเอง|
+25|500|5|7|CM|~v94549||1|k|~BWD Valve Drain PG5101 Handwell ชำรุด > สั่ง Valve แล้ว~P|
+26|200|5|0|CM|10300081462|P3B08|1|kl|~BGatv V.HN Passing เสียตรง PG-2003  > สั่ง Valve แล้ว > เปลี่ยนเอง|
+27|200|5|7|CM|10300081460|P3B08|1|k|~BGate Valve HN เกลียวเสีย R-3202 > สั่ง Valve แล้ว~P|
+28|200|5|0|CM|10300081461|P3B08|1|l|~BGate V.1-1/2 PR เกลียวเสีย Top R-3202 > สั่ง Valve แล้ว > เปลี่ยนเอง|
+29|800|5|6|IM|10020003444||19|56789a|~Bงานติดตั้ง Air knocker เพิ่ม ที่ทางลง TK-3804 และ TK-7804  > สั่งซื้อของแล้ว แต่ยังไม่ได้รับของ ~P|
+30|800|5|6|IM|0101-43000 / 521999||1|89abcd|~B(Project OPE) ติดตั้ง handrail ป้องกันการตกบริเวณ TK-3808 / TK-7808~P|
+31|100|5|6|IM|0101-43000 / 521999|P3B01|17|efghij|~B(Project OPE) แก้ไข Line Connect AT Drum เยื้อง ( ไม่ได้ Center ) ~P|
+32|600|5|7|PM|~v04179||25|ab|~Bงานตัดเปลี่ยน Valve line brine 12" (หนวดกุ้ง) บริเวณ C-3601A/B  > สั่ง Mat's ให้ JRN แล้ว , ยังไม่ได้ทำเสนอราคางาน FAB|
+33|200|5|4|PM|~v04036|P3B08|24|defghijkl|~Bงานขัดสนิม-ทำสี อุปกรณ์ 1" Valve & Pipe line HN loop R-3200 >ยังไม่ได้ทำเสนอราคางานทำสี|
+34|200|5|4|PM|~v04036|P3B08|24|defghijkl|~Bงานขัดสนิม-ทำสี อุปกรณ์ 1-1/2" Valve & Pipe line HBD loop R-3200 U-BEND >ยังไม่ได้ทำเสนอราคางานทำสี|
+35|200|5|4|PM|~u7|P3B13|24|defghijkl|~Bงานขัดสนิม-ทำสี อุปกรณ์ Support & loop R-3200 >ยังไม่ได้ทำเสนอราคางานทำสี|
+1|500|6|0|PM|10311103872||161|pqrw|C-3501 O/H Mech - Seal leak > Oil Seal Pot "Low"|[2 ~x ROI
+2|800|6|0|PM|10311102759||153|stuw|RF-3802 O/H Rotary valve > Follow up NDE N2 Flush ไม่เข้า|[2 ~x ROI
+3|500|6|0|PM|10311103458||137|vwxy|RF-3502 O/H Rotary valve > NDE N2 Flush ไม่เข้า|[4 ~x ROI
+4|300|6|0|PM|10311110908||17|tu|Add By OPE_RF-3503 Inspect Rotary valve "Powder Leak"|
+5|400|6|0|PM|10311110324||8|h|Add By OPE_Change Valve Inlet  FV-4202 packing leak|
+6|100|6|14|PM|10311110907||8|jklmno|Add By OPE_งานแก้ไขอินซู #100 จำนวน 6 จุด|
+7|300|6|0|IM|10320006473||24|mn|Add By OPE_งานแก้ไขงานติดตั้ง Gate valve ของ Safety valve 5 จุด|
+8|800|6|7|CM|10320006474||1|kl|Add By OPE_งานตัดเปลี่ยน Line Overflow 4" D-3814 "ลงรางระบาย" > Mat's By JRN|
+9|800|6|9|CL|10330017059 / 10330017058||0|9a|Add By OPE_HPWJ Line 4" Overflow PCW D-3814 / D-7814 [ALL Scope TSP]|
+10|100|6|9|CL|10330017060|P3B14|0|ij|Add By OPE_HPWJ Line MUD D-3106A/B --> D-3104A/B --> D-3108A/B [ALL Scope TSP]|
+11|600|6|9|CL|10330017061||0|lm|Add By OPE_HPWJ Line LBD 4" D-3601 --> D-3602 [ALL Scope TSP]|
+12|800|6|9|CL|10330017062||0|bc|Add By OPE_HPWJ Line Vent gas 3" Z-3822 [ALL Scope TSP]|
+13|200|6|14|IM|10320006470|P3B08|0|k|Add By OPE_Valve PR Flush เปิดไม่สุดติด Support Tube IA > กลับทิศทาง Valve ใหม่|
+`.trim();
+
+    // ============================================================================
+    // 3. CRITICAL PATH DETAILED SCHEDULES (EX-3801, EX-7801, A-3401, C-3401)
+    // ============================================================================
+    const EXT_GROUPS = [
+      "0. Overview Milestones",
+      "1. Mixer (Cleaning & Sleeve Replacement)",
+      "2. Mixer Gear Reducer (ISHIBASHI)",
+      "3. Gear Pump (Melt Pump)",
+      "4. Gear Pump Gear Reducer (SEISA)",
+      "5. Supervisors & Workers"
+    ];
+
+    const RAW_EXTRUDER_76 = `
+0|Shut Down / Mixer steam cut|PP3|2|1
+0|Gear Pump H/O cut|PP3|3s|1
+0|Steam, Hot Oil in (Heat Up)|PP3|t|1
+0|Preparation for operating|PP3|uvw|1
+0|Operation|PP3|xy|0
+1|Disconnect Wiring & Piping & Coupling|PP3|1|0
+1|Check alignment & loose bolt gate & loose bolt hopper|PP3|2|0
+1|Mixer Chamber Open & separate chamber no.2 and water end|PP3|4|1
+1|Cleaning Chamber|PP3|defg|0
+1|Cleaning Rotor|PP3|defg|0
+1|Rotor 3D Scan + thickness measurement of coating|PP3|hij|1
+1|Disassemble Mixer Transition Piece, No.2 Chamber, Water End Frame|PP3|4|1
+1|Move to Workshop|STP work shop|45|1
+1|Disassemble existing Outside Sleeve, clean Water End Frame include remove bolt|STP work shop|678|1
+1|Disassemble Bush at Discharger (Only Train 1)|STP work shop|9a|1
+1|Assemble the new Outside Sleeve/ Bush discharger|STP work shop|bcd|1
+1|Move to site|PP3|e|1
+1|Reassemble Mixer Transition Piece, No.2 Chamber, Water End Frame|PP3|fgh|1
+1|Chamber Close|PP3|i|1
+1|Coupling Alignment (Mixer - Gear Reducer)|PP3|lm|1
+1|Reconnect Wiring & Piping & Coupling|PP3|mn|0
+1|Hot condition Alignment|PP3|stuv|1
+1|No-Load Test Run|PP3|w|1
+1|Load Test Run|PP3|x|1
+2|Disconnect Wiring & Piping & Coupling|PP3|1|0
+2|EE remove main motor wiring|PP3|2|0
+2|Check alignment (motor - main gear)|PP3|2|0
+2|Dismantle Upper Casing + remove output shaft|PP3|2|1
+2|EE remove main motor + ME transport output shaft to maintenance shop|PP3|3|1
+2|Install top cover and check bearing housing dimension|PP3|4|0
+2|Transport from Site to Maintenance shop|PP3|5|1
+2|Mixer Gear Reducer Disassemble|STP work shop|67|1
+2|Mixer Gear Reducer Clean Part|STP work shop|78|1
+2|Mixer Gear Reducer Dimension check|STP work shop|89|1
+2|Mixer Gear Reducer Gear PT MT Check|STP work shop|9a|1
+2|Mixer Gear Reducer Part Repair (Laser Welding / HVOF)|STP work shop|bcd|1
+2|Mixer Gear Reducer Gear Assemble and Clearance Check|STP work shop|efg|1
+2|Transport from Maintenance shop to Site|STP work shop|h|1
+2|Install Output Shafts and Upper Casing|PP3|hij|1
+2|Tooth Contact Check|PP3|j|1
+2|Reconnect Wiring & Piping & Coupling|PP3|k|0
+2|Coupling Alignment (Gear Reducer - Motor)|PP3|no|1
+2|Hot condition Alignment|PP3|stuv|1
+2|No-Load Test Run|PP3|w|1
+2|Load Test Run|PP3|x|1
+3|Disconnect Wiring & Piping & Coupling|PP3|1|0
+3|Disassemble Gear Pump|PP3|5678|0
+3|Cleaning the parts include Inspection after Cleaning|PP3|9abc|0
+3|Reassemble Gear Pump include Replace new Seal Parts for RTSV|PP3|defgh|0
+3|Reconnect Wiring & Piping|PP3|i|0
+3|Coupling Alignment (Gear Pump - Gear Pump Gear Reducer)|PP3|no|1
+3|Phase Alignment|PP3|stu|1
+3|Hot Alignment|PP3|stuv|1
+3|Reconnect Coupling|PP3|v|0
+3|Polymer Fill up|PP3|w|1
+3|Load Test Run|PP3|x|1
+4|Disconnect Wiring & Piping & Coupling|PP3|12|0
+4|Check alignment|PP3|2|0
+4|Transport from Site to Maintenance shop|PP3|34|1
+4|Gear Pump Gear Reducer Disassemble|STP work shop|4567|1
+4|Gear Pump Gear Reducer Clean Part|STP work shop|78|1
+4|Gear Pump Gear Reducer Dimension check|STP work shop|89|1
+4|Gear Pump Gear Reducer PT MT Check|STP work shop|9a|1
+4|Gear Pump Gear Reducer Part Repair (Laser Welding / HVOF)|STP work shop|bcdef|1
+4|Gear Pump Gear Reducer Assemble and Clearance Check|STP work shop|ghijk|1
+4|Transport from Maintenance shop to Site|STP work shop|l|1
+4|Tooth contact check|PP3|ghi|0
+4|Reconnect Wiring & Piping|PP3|no|0
+4|Coupling Alignment (Gear Pump Gear Reducer - Motor)|PP3|stu|1
+4|Reconnect Coupling between Gear Pump Gear Reducer and Motor|PP3|v|0
+4|Hot condition Alignment|PP3|stuv|1
+4|No-Load Test Run|PP3|w|1
+4|Load Test Run|PP3|x|1
+5|KSL Mechanical Supervisors (1 person)|PP3 / KSL|123456789abcdefghijklmnopqrstuvwx|0
+5|ISHIBASHI Mechanical Supervisor (1 person)|STP / PP3|123456789abcdefghijklm|0
+5|SHI-GB Mechanical Supervisor (1 person)|STP / PP3|123456789abcdefghijklm|0
+`.trim();
+
+    const A34_GROUPS = [
+      "1. A-3401 PM 3Y Overhaul & R-3401",
+      "2. C-3401 Preparation & GUIDE VANE",
+      "3. C-3401 TURBO BLOWER Overhaul",
+      "4. C-3401 Gearbox (Speed Increaser)"
+    ];
+
+    const RAW_A3401_C3401_50 = `
+0|A-3401|- System isolate and swing blind|OPE|3456|0
+0|A-3401|A-3401 PM 3Y OVERHAUL and R-3401 Cleaning (Master Window)|ALL|3456789abcdefghijklmnopqr|0
+0|A-3401|HYD Loose bolt and Open manhole for ventilation work R-3401|MES + ALPHA + TSP|7|1
+0|A-3401|Remove wiring motor and instrument A-3401|IE/EE|7|0
+0|A-3401|Loose bolt and remove motor with gearbox|MER + STP|8|1
+0|A-3401|Set up lifting tools, lift up agitator|MER + STP|8|1
+0|A-3401|Remove coupling agitator and Drop Mech Seal on ground|MER + STP|89|1
+0|A-3401|Mobilize A-3401 to workshop (Crane and Hiab)|MER + STP + TSK + HHP|9|1
+0|A-3401|Overhaul Mech seal agitator A-3401 at STP Workshop|MER + STP|abcdefgh|1
+0|A-3401|Manual Clean Top and Bottom Grid R-3401|MES + TSP|abcdefgh|1
+0|A-3401|Mobilize A-3401 back to site (Crane and Hiab)|MER + STP + TSK + HHP|i|1
+0|A-3401|Inspect PTFE Bush A-3401|MER + STP|i|1
+0|A-3401|Lift up and Reinstall A-3401 mech seal|MER + STP|ijk|1
+0|A-3401|Reinstall A-3401 new gearbox with motor|MER + STP|jk|1
+0|A-3401|Final Clean inside R-3401|MES + TSP|lm|0
+0|A-3401|Close Manhole and Torque bolt R-3401|MES + ALPHA + TSP|mn|1
+1|C-3401|C-3401 Inspect bearing, guide vane, gearbox (Master Window)|ALL|3456789abcdefghijklmnopqr|0
+1|C-3401|HYD Loose bolt and Remove short pipe (Crane)|MER + ALPHA + TSK|89|1
+1|C-3401|EE remove motor for overhauling at Workshop & Reinstall|EE|79abcdefghijklm|1
+1|C-3401|Open handhole, Disconnect guide vane link and remove Air cylinder (Crane)|MER + TSK|ab|0
+1|C-3401|Dismantle Casing cover of Guide vane (Crane)|MER + TSK|bc|0
+1|C-3401|Replace DU Bush/ V packing / O-ring of guide vane|MER|g|0
+1|C-3401|Check clearance guide vane blade|MER|g|0
+1|C-3401|Assemble all guide vane part and install at site|MER + TSK|ghi|0
+1|C-3401|Confirm opening degree of vane and Function Test on site|MER + OPE|m|1
+2|C-3401|Remove Guard, Diaphragm Coupling|MER|78|0
+2|C-3401|Recheck alignment/DBSE before removal|MER|78|0
+2|C-3401|Remove upper casing Turbo|MER|d|1
+2|C-3401|Check bearing clearance, labyrinth clearance and axial movement|MER|d|1
+2|C-3401|Remove instrument/ vibration probe / axial probe|IE / ROI|de|0
+2|C-3401|Remove bearing casing (inside)|MER|de|0
+2|C-3401|Remove bearing temp sensor|IE / ROI|e|0
+2|C-3401|Remove journal bearing, thrust bearing // Cleaning and inspection|MER|e|1
+2|C-3401|PT for Journal Bearing / Thrust Bearing / Diaphragm Coupling|ROI|ef|1
+2|C-3401|Assemble all Turbo parts|MER|klm|1
+2|C-3401|Reinstall instrument/ vibration probe / axial probe / Temp sensor|IE / ROI|klm|0
+2|C-3401|Realignment between turbo and gearbox|MER|nop|1
+3|C-3401|Open upper casing gearbox|MER|ef|1
+3|C-3401|Check Backlash/Axial movement/Tooth Contact before dismantle|MER|f|1
+3|C-3401|Dimension check Journal Bearing, Thrust Bearing and labyrinth clearance|MER|f|1
+3|C-3401|Remove instrument/ vibration probe / axial probe / Temp sensor|IE / ROI|f|0
+3|C-3401|PT for Journal Bearing + Gear Tooth|ROI|fg|1
+3|C-3401|MT for gear and pinion|ROI|fg|1
+3|C-3401|Inspection and dimension measurement following check sheet|MER|l|0
+3|C-3401|Assemble all Gearbox parts|MER|lm|1
+3|C-3401|Reinstall instrument/ vibration probe / axial probe / Temp sensor|IE / ROI|lm|0
+3|C-3401|Realignment between gearbox and motor|MER|nop|1
+3|C-3401|Replace lubricant and Barrier/Buffer fluid for equipment|MER|p|0
+3|C-3401|Reinstall short pipe suction side|MER + ALPHA + TSK|n|0
+3|C-3401|Remove scaffolding and reinstall insulation|MER|qr|1
+`.trim();
+
+    function expandDict(str) {
+      if (!str) return "";
+      let out = str;
+      for (const [tok, val] of Object.entries(DICT)) {
+        out = out.split(tok).join(val);
+      }
+      return out;
+    }
+
+    function fmtDayIdx(d) {
+      const n = parseInt(d, 10);
+      return n <= 30 ? `${String(n).padStart(2, "0")} Nov` : `${String(n - 30).padStart(2, "0")} Dec`;
+    }
+
+    function resolveLinkedVendor(desc, resp, msExpanded, cat) {
+      const d = (desc + " " + msExpanded).toUpperCase();
+      const r = (resp || "").toUpperCase();
+      if (d.includes("BURCKHARDT")) return "BURCKHARDT";
+      if (d.includes("BY KSB") || d.includes("KSB PUMP")) return "KSB";
+      if (d.includes("BY MTE") || d.includes("MTE OH")) return "MTE";
+      if (d.includes("BY PSS")) return "PSS";
+      if (d.includes("BY SYNERGY")) return "SYNERGY";
+      if (d.includes("JOHNSON CONTROL")) return "JOHNSON CONTROL / PROTECH";
+      if (d.includes("W/S ST")) return "W/S ST";
+      if (d.includes("SHOP STP") || d.includes("@ STP") || d.includes("ISHIBASHI") || d.includes("SEISA")) return "STP";
+      if (d.includes("BY TSP") || d.includes("SCOPE TSP") || d.includes("HPWJ @ TSP")) return "TSP";
+      if (d.includes("JRN")) return "JRN";
+      if (r.includes("SYSTEMCOPR") || r.includes("SYSTEMCORP")) return "SYSTEMCORP";
+      if (r.includes("MES / TSP")) return "TSP";
+      if (r.includes("MES / JRN")) return "JRN";
+      if (r.includes("MES / CR3")) return "CR3";
+      if (r.includes("MES / HHP")) return "HHP";
+      if (r.includes("MES / AMD")) return "AMD";
+      if (r.includes("PROTECH")) return "PROTECH";
+      if (r.includes("มือปืน ROTAT1")) return "SYNERGY";
+      if (d.includes("EX-3801") || d.includes("EX-7801") || d.includes("S-3803") || d.includes("S-7803") || d.includes("S-3804") || d.includes("S-7804") || d.includes("A-3401") || d.includes("C-3401")) return "STP";
+      if (cat === "ME PM Works_BAG-FILTER & FILTER") return "PROTECH";
+      return "PROTECH / RMT";
+    }
+
+    function generateStandardEngineeringSubTasks(desc, loto, supports, msExpanded) {
+      const d = desc.toLowerCase();
+      const steps = [];
+      const prepParts = ["ขออนุญาต Work Permit"];
+      if (loto && loto !== "-") prepParts.push(`ตัดแยกระบบ LOTO (${loto})`);
+      else prepParts.push("ตัดแยกพลังงาน (Isolation)");
+      if (supports.includes("SCAFF")) prepParts.push("ตั้งนั่งร้าน (Scaffolding)");
+      if (supports.includes("INSU")) prepParts.push("รื้อฉนวนหุ้ม (Insulation)");
+      if (supports.includes("HAEB/CRANE")) prepParts.push("เตรียมเครน/อุปกรณ์ยก (Crane)");
+      steps.push(`1. เตรียมความพร้อมและตัดแยกระบบ: ${prepParts.join(" + ")}`);
+
+      if ((d.includes("ex-3801") || d.includes("ex-7801")) && (d.includes("slide barral") || d.includes("screw mixer"))) {
+        steps.push("2. คลายโบลต์หน้าแปลน (L/B) และเลื่อนเปิดเสื้อ Barrel (Slide Barrel)");
+        steps.push("3. ทำความสะอาดและตรวจสอบขนาด/การสึกหรอของ Screw Mixer");
+        steps.push("4. เปลี่ยนอะไหล่ Mixer Transition Piece และ Guide Bush ใหม่");
+        steps.push("5. เลื่อนปิด Barrel ประกอบคืนและขันปอนด์โบลต์ตามค่ามาตรฐาน (T/B Torque)");
+      } else if ((d.includes("ex-3801") || d.includes("ex-7801")) && (d.includes("ishibashi") || d.includes("seisa") || d.includes("gear"))) {
+        steps.push("2. ถอด Coupling บันทึกค่า Pre-Alignment และยกย้ายส่งซ่อมที่ Shop STP");
+        steps.push("3. ถอดล้าง ตรวจสอบ PT/MT ฟันเฟือง, เปลี่ยน Bearing & Oil Seal ร่วมกับ ROI");
+        steps.push("4. ยกติดตั้งกลับเข้าแท่น ตั้งศูนย์เพลาละเอียด (FN Align.) และทดสอบเดินตัวเปล่า");
+      } else if (d.includes("agitator") || d.includes("a-3106") || d.includes("a-3201") || d.includes("a-3401") || d.includes("a-3501")) {
+        steps.push("2. ถอดสายไฟมอเตอร์ ถอดชุด Gear และชุด Mechanical Seal / V-Packing");
+        steps.push("3. ทำความสะอาดภายใน ตรวจสอบ Shaft Run-out และเปลี่ยน Bearing / Bushing");
+        steps.push("4. ประกอบชุดซีลและเกียร์คืน กวดขันโบลต์ล็อกใบกวน เติมน้ำมันเกียร์และตั้งศูนย์เพลา");
+      } else if (d.includes("comp") || d.includes("c-3301") || d.includes("c-3401") || d.includes("c-3601") || d.includes("c-3501")) {
+        steps.push("2. ถอด Coupling บันทึกค่า Pre-Alignment และเปิดฝาครอบตรวจสอบ Bearing / Guide Vane / Mech Seal");
+        steps.push("3. ล้างถังน้ำมันหล่อลื่น เปลี่ยนไส้กรอง เติมน้ำมันใหม่ และประกอบชุด Compressor คืน");
+        steps.push("4. ตั้งศูนย์เพลาละเอียด (Re-check Alignment) และตรวจสอบระบบซีล");
+      } else if (d.includes("check chain coupling") || d.includes("lovejoy")) {
+        steps.push("2. เปิดฝาครอบ Coupling Guard ถอดล้างตรวจสอบการสึกหรอของโซ่/ยอย");
+        steps.push("3. ถ่ายเปลี่ยนน้ำมันหล่อลื่น / ล้างชุดกรองน้ำมัน และประกอบฝาครอบคืน");
+      } else if (d.includes("pump") || d.includes("p-3108") || d.includes("p-3200") || d.includes("p-3201") || d.includes("p-3301") || d.includes("p-3304") || d.includes("p-3401") || d.includes("p-3671")) {
+        steps.push("2. ถอด Coupling และยกตัวปั๊ม / Bucket Pump ส่ง Overhaul เปลี่ยน Mechanical Seal & Bearing");
+        steps.push("3. ติดตั้งชุดปั๊มกลับเข้าแท่น ขันปอนด์โบลต์หน้าแปลน เติมน้ำมันหล่อลื่นและทำ Alignment");
+      } else if (d.includes("bag-filter") || d.includes("filter")) {
+        steps.push("2. ตัดแยกระบบ เปิดฝาครอบถังกรอง และถอดไส้กรอง/ถุงกรองเก่าออกทำความสะอาด");
+        steps.push("3. ติดตั้งไส้กรอง/ถุงกรองชุดใหม่ เปลี่ยนปะเก็นฝาถัง และปิดฝาขันโบลต์คืนสภาพ");
+      } else if (d.includes("plate") || d.includes("gasket")) {
+        steps.push("2. วัดระยะอัดเดิม ถอดแผ่น Plate Heat Exchanger ออกล้างทำความสะอาดและเปลี่ยนยาง Rubber Gasket ใหม่");
+        steps.push("3. เรียงประกอบแผ่น Plate คืนและขันอัดโบลต์ให้ได้ระยะ STD Dimension");
+      } else {
+        steps.push("2. เปิด Manhole / ถอดหน้าแปลน และฉีดล้างทำความสะอาดด้วยน้ำแรงดันสูง (HPWJ) หรือซ่อมบำรุงตามใบงาน");
+        steps.push("3. ตรวจสอบความสะอาด/คุณภาพงานร่วมกับ ROI และประกอบคืนด้วยปะเก็นใหม่ (Close Loop)");
+      }
+
+      if (msExpanded) {
+        msExpanded.split(";").map(s => s.trim()).filter(Boolean).forEach(m => {
+          steps.push(`📌 Milestone ตามแผน: ${m}`);
+        });
+      }
+
+      steps.push(`${steps.length + 1}. ตรวจรับงานขั้นสุดท้ายร่วมกับ ROI / เคลียร์พื้นที่ (Housekeeping) และปลด LOTO ส่งมอบงาน`);
+      return steps.map((text, idx) => ({ id: `st_${idx + 1}`, text, done: false }));
+    }
+
+    function decodeAll281Tasks() {
+      const lines = RAW_281_WORKLIST.split("\n").map(l => l.trim()).filter(Boolean);
+      return lines.map((line, idx) => {
+        const [no, sec, catIdx, respIdx, type, moRaw, loto, supMaskStr, dayCharsStr, descRaw, msRaw] = line.split("|");
+        const cat = CATEGORIES[parseInt(catIdx, 10)] || CATEGORIES[0];
+        const resp = RESPONSIBLES[parseInt(respIdx, 10)] || "Unassigned";
+        const mo = expandDict(moRaw);
+        const desc = expandDict(descRaw);
+        const msExpanded = expandDict(msRaw);
+        const mask = parseInt(supMaskStr || "0", 10);
+        const supports = SUP_LIST.filter((_, i) => (mask & (1 << i)) !== 0);
+
+        const activeDays = [];
+        for (const ch of (dayCharsStr || "8")) {
+          const dNum = DAY_CHARS.indexOf(ch) + 1;
+          if (dNum >= 1 && dNum <= 35) activeDays.push(dNum);
+        }
+        if (activeDays.length === 0) activeDays.push(8);
+        const startDay = Math.min(...activeDays);
+        const endDay = Math.max(...activeDays);
+        const planDays = `${fmtDayIdx(startDay)} – ${fmtDayIdx(endDay)}`;
+        const weight = activeDays.length;
+        const isCancelled = desc.includes("ยกลิก W/L") || desc.includes("ยกเลิก W/L");
+
+        const tagMatch = desc.match(/(?:TA26[_ ]*(?:MT ITEM FOR )?)?([A-Z]{1,3}-?\d{4}[A-Z0-9/]*)/);
+        const tag = tagMatch ? tagMatch[1] : `SEC-${sec}`;
+        const vendor = resolveLinkedVendor(desc, resp, msExpanded, cat);
+        const subtasks = generateStandardEngineeringSubTasks(desc, loto, supports, msExpanded);
+
+        const isMajorCrit = !isCancelled && (
+          weight >= 10 || desc.toLowerCase().includes("critical") ||
+          desc.toLowerCase().includes("crane 200") || desc.toLowerCase().includes("crane 160") ||
+          desc.toLowerCase().includes("crane 50") || tag.includes("EX-3801") || tag.includes("EX-7801") ||
+          tag.includes("A-3401") || tag.includes("C-3401") || tag.includes("C-3301") || tag.includes("C-3601")
+        );
+
+        return {
+          id: `WL-${String(idx + 1).padStart(3, "0")}`,
+          seq: idx + 1, no, sec, cat, tag, desc, resp, vendor, mo, loto, type, supports,
+          activeDays, startDay, endDay, planDays,
+          weight: isCancelled ? 0 : weight,
+          isCancelled, isMajorCrit, subtasks, photos: [], remarks: ""
+        };
+      });
+    }
+
+    function decodeDetailedCriticalSchedules() {
+      const list = [];
+      const extRows = RAW_EXTRUDER_76.split("\n").map(l => l.trim()).filter(Boolean);
+      ["EX-3801", "EX-7801"].forEach((tag, tIdx) => {
+        extRows.forEach((line, idx) => {
+          const [gIdx, desc, loc, dStr, cpStr] = line.split("|");
+          const days = [];
+          for (const ch of (dStr || "8")) {
+            const n = DAY_CHARS.indexOf(ch) + 1;
+            if (n >= 1 && n <= 35) days.push(n);
+          }
+          if (!days.length) days.push(8);
+          const cleanDesc = tIdx === 1 ? desc.replace("(Only Train 1)", "(Train 2 Check)") : desc;
+          list.push({
+            id: `${tag.replace("-", "")}-${idx + 1}`,
+            pkg: tag, group: EXT_GROUPS[parseInt(gIdx, 10)] || EXT_GROUPS[1],
+            desc: cleanDesc, loc: loc || "PP3", days,
+            startDay: Math.min(...days), endDay: Math.max(...days),
+            isCriticalPath: cpStr === "1", progress: 0
+          });
+        });
+      });
+
+      RAW_A3401_C3401_50.split("\n").map(l => l.trim()).filter(Boolean).forEach((line, idx) => {
+        const [gIdx, eqTag, desc, pic, dStr, cpStr] = line.split("|");
+        const days = [];
+        for (const ch of (dStr || "8")) {
+          const n = DAY_CHARS.indexOf(ch) + 1;
+          if (n >= 1 && n <= 35) days.push(n);
+        }
+        if (!days.length) days.push(8);
+        list.push({
+          id: `${eqTag.replace("-", "")}-${idx + 1}`,
+          pkg: eqTag, group: A34_GROUPS[parseInt(gIdx, 10)] || A34_GROUPS[0],
+          desc, loc: pic || "MER + STP", days,
+          startDay: Math.min(...days), endDay: Math.max(...days),
+          isCriticalPath: cpStr === "1", progress: 0
+        });
+      });
+      return list;
+    }
+
+    // ============================================================================
+    // 4. STATE MANAGEMENT & SCHEDULE EDITOR ENGINE
+    // ============================================================================
+    const STORAGE_KEY_TASKS = "TAPP3_2026_FINAL_COMPLETE_TASKS_V7";
+    const STORAGE_KEY_CRIT = "TAPP3_2026_FINAL_COMPLETE_CRIT_V7";
+    const STORAGE_KEY_VENDORS = "TAPP3_2026_FINAL_COMPLETE_VENDORS_V7";
+    const STORAGE_KEY_DAY = "TAPP3_2026_FINAL_COMPLETE_DAY_V7";
+
+    let tasks = [];
+    let critSchedules = [];
+    let vendorList = [];
+    let selectedCalendarDay = 4; // Default Nov 4
+    let dailyGroupBy = "VENDOR";
+    let wbdViewMode = "NUMBERED_LIST";
+    let wbdCollapsed = false;
+    let expandedWbdTaskIds = new Set();
+    let expandedWbdDayNums = new Set([4, 8]);
+    let currentPage = 1;
+    let pageSize = 60;
+    let selectedGanttPkg = "EX-3801";
+    let editingTarget = null; // { id, isCritSchedule }
+    let tempPickedDays = new Set();
+    let chartInstance = null;
+
+    function initApp() {
+      const savedTasks = localStorage.getItem(STORAGE_KEY_TASKS) || localStorage.getItem("TAPP3_2026_MASTER281_TASKS_V6") || localStorage.getItem("TAPP3_2026_VENDOR281_TASKS_V5");
+      const savedCrit = localStorage.getItem(STORAGE_KEY_CRIT);
+      const savedVendors = localStorage.getItem(STORAGE_KEY_VENDORS);
+      const savedDay = localStorage.getItem(STORAGE_KEY_DAY);
+
+      if (savedTasks) {
+        try {
+          const parsed = JSON.parse(savedTasks);
+          tasks = (parsed.length >= 281 && parsed[0].vendor) ? parsed : decodeAll281Tasks();
+        } catch (e) { tasks = decodeAll281Tasks(); }
+      } else {
+        tasks = decodeAll281Tasks();
+      }
+
+      if (savedCrit) {
+        try { critSchedules = JSON.parse(savedCrit); } catch (e) { critSchedules = decodeDetailedCriticalSchedules(); }
+      } else {
+        critSchedules = decodeDetailedCriticalSchedules();
+      }
+
+      if (savedVendors) {
+        try { vendorList = JSON.parse(savedVendors); } catch (e) { vendorList = [...DEFAULT_VENDORS]; }
+      } else {
+        vendorList = [...new Set([...DEFAULT_VENDORS, ...tasks.map(t => t.vendor)])].sort();
+      }
+
+      selectedCalendarDay = savedDay !== null ? parseInt(savedDay, 10) : 4;
+
+      const dayOpts = DAYS_35.map(d => `<option value="${d.day}">Day ${d.day} (${d.label} 2026)</option>`).join("");
+      document.getElementById("schStartSelect").innerHTML = dayOpts;
+      document.getElementById("schEndSelect").innerHTML = dayOpts;
+
+      populateDaySelector();
+      populateVendorDropdowns();
+      populateResponsibleDropdown();
+      setDailyGroupBy(dailyGroupBy);
+      updateDashboard();
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(tasks));
+        localStorage.setItem(STORAGE_KEY_CRIT, JSON.stringify(critSchedules));
+        localStorage.setItem(STORAGE_KEY_VENDORS, JSON.stringify(vendorList));
+        localStorage.setItem(STORAGE_KEY_DAY, String(selectedCalendarDay));
+      } catch (e) {}
+    }
+
+    function resetToDefaultData() {
+      if (!confirm("ต้องการรีเซ็ตข้อมูลทั้ง 281 Worklist และตารางเวลาทั้งหมดกลับเป็นค่าเริ่มต้นใช่หรือไม่?")) return;
+      localStorage.removeItem(STORAGE_KEY_TASKS);
+      localStorage.removeItem(STORAGE_KEY_CRIT);
+      tasks = decodeAll281Tasks();
+      critSchedules = decodeDetailedCriticalSchedules();
+      populateVendorDropdowns();
+      populateResponsibleDropdown();
+      updateDashboard();
+    }
+
+    function switchMainView(viewName) {
+      const isDash = viewName === "DASHBOARD";
+      document.getElementById("mainViewDashboard").classList.toggle("hidden", !isDash);
+      document.getElementById("mainViewCritical").classList.toggle("hidden", isDash);
+      document.getElementById("mainTab1Btn").className = isDash
+        ? "px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-blue-600 text-white shadow transition"
+        : "px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition";
+      document.getElementById("mainTab2Btn").className = !isDash
+        ? "px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-rose-600 text-white shadow transition"
+        : "px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white transition";
+      if (!isDash) renderCriticalGanttView();
+    }
+
+    // ============================================================================
+    // 5. SCHEDULE EDITOR MODAL FUNCTIONS (แก้ไขวันเข้างาน)
+    // ============================================================================
+    function openScheduleModal(id, isCritSchedule = false) {
+      const item = isCritSchedule ? critSchedules.find(x => x.id === id) : tasks.find(x => x.id === id);
+      if (!item) return;
+      editingTarget = { id, isCritSchedule };
+      const daysArr = isCritSchedule ? (item.days || [8]) : (item.activeDays || [8]);
+      tempPickedDays = new Set(daysArr);
+
+      document.getElementById("schModalTag").textContent = isCritSchedule ? `${item.pkg} • ${item.group}` : `#${item.seq} • Sec ${item.sec} • ${item.tag}`;
+      document.getElementById("schModalTitle").textContent = item.desc;
+      document.getElementById("schStartSelect").value = String(item.startDay || Math.min(...daysArr));
+      document.getElementById("schEndSelect").value = String(item.endDay || Math.max(...daysArr));
+
+      const extraBox = document.getElementById("schExtraFields");
+      if (isCritSchedule) {
+        extraBox.classList.add("hidden");
+      } else {
+        extraBox.classList.remove("hidden");
+        document.getElementById("schRespInput").value = item.resp || "";
+        document.getElementById("schVendorInput").value = item.vendor || "";
+      }
+
+      renderScheduleModalDayGrid();
+      document.getElementById("scheduleModal").classList.remove("hidden");
+      document.getElementById("scheduleModal").classList.add("flex");
+    }
+
+    function closeScheduleModal() {
+      document.getElementById("scheduleModal").classList.add("hidden");
+      document.getElementById("scheduleModal").classList.remove("flex");
+      editingTarget = null;
+    }
+
+    function applyQuickDateRange() {
+      const s = parseInt(document.getElementById("schStartSelect").value || "1", 10);
+      const e = parseInt(document.getElementById("schEndSelect").value || "1", 10);
+      const start = Math.min(s, e);
+      const end = Math.max(s, e);
+      tempPickedDays.clear();
+      for (let d = start; d <= end; d++) tempPickedDays.add(d);
+      renderScheduleModalDayGrid();
+    }
+
+    function clearAllPickedDays() {
+      tempPickedDays.clear();
+      renderScheduleModalDayGrid();
+    }
+
+    function togglePickedDay(dNum) {
+      if (tempPickedDays.has(dNum)) tempPickedDays.delete(dNum);
+      else tempPickedDays.add(dNum);
+      renderScheduleModalDayGrid();
+    }
+
+    function renderScheduleModalDayGrid() {
+      document.getElementById("schSelectedCount").textContent = `เลือกวันเข้างานไว้ ${tempPickedDays.size} วัน`;
+      document.getElementById("schDayGrid").innerHTML = DAYS_35.map(d => {
+        const active = tempPickedDays.has(d.day);
+        return `
+          <button type="button" onclick="togglePickedDay(${d.day})" class="p-2 rounded-lg border text-center transition ${
+            active ? "bg-blue-600 text-white border-blue-700 font-extrabold shadow-sm" : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+          }">
+            <div class="text-[10px] opacity-80">Day ${d.day}</div>
+            <div class="text-xs">${d.label}</div>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function saveScheduleModal() {
+      if (!editingTarget) return;
+      const sortedDays = [...tempPickedDays].sort((a, b) => a - b);
+      if (sortedDays.length === 0) return alert("กรุณาเลือกวันเข้างานอย่างน้อย 1 วันครับ");
+
+      if (editingTarget.isCritSchedule) {
+        const c = critSchedules.find(x => x.id === editingTarget.id);
+        if (c) {
+          c.days = sortedDays;
+          c.startDay = sortedDays[0];
+          c.endDay = sortedDays[sortedDays.length - 1];
+        }
+      } else {
+        const t = tasks.find(x => x.id === editingTarget.id);
+        if (t) {
+          t.activeDays = sortedDays;
+          t.startDay = sortedDays[0];
+          t.endDay = sortedDays[sortedDays.length - 1];
+          t.planDays = `${fmtDayIdx(t.startDay)} – ${fmtDayIdx(t.endDay)}`;
+          t.weight = t.isCancelled ? 0 : sortedDays.length;
+          const newResp = document.getElementById("schRespInput").value.trim();
+          const newVen = document.getElementById("schVendorInput").value.trim().toUpperCase();
+          if (newResp) t.resp = newResp;
+          if (newVen) {
+            t.vendor = newVen;
+            if (!vendorList.includes(newVen)) vendorList.push(newVen);
+          }
+        }
+      }
+
+      populateVendorDropdowns();
+      populateResponsibleDropdown();
+      closeScheduleModal();
+      updateDashboard();
+    }
+
+    // Direct 1-Click Day Toggle on Gantt Chart cell!
+    function toggleGanttCellDay(id, isFrom281, dayNum) {
+      if (isFrom281) {
+        const t = tasks.find(x => x.id === id);
+        if (!t) return;
+        const set = new Set(t.activeDays || []);
+        if (set.has(dayNum)) {
+          if (set.size <= 1) return alert("แต่ละ Worklist ต้องมีวันเข้างานอย่างน้อย 1 วันครับ");
+          set.delete(dayNum);
+        } else {
+          set.add(dayNum);
+        }
+        const sorted = [...set].sort((a, b) => a - b);
+        t.activeDays = sorted;
+        t.startDay = sorted[0];
+        t.endDay = sorted[sorted.length - 1];
+        t.planDays = `${fmtDayIdx(t.startDay)} – ${fmtDayIdx(t.endDay)}`;
+        t.weight = t.isCancelled ? 0 : sorted.length;
+      } else {
+        const c = critSchedules.find(x => x.id === id);
+        if (!c) return;
+        const set = new Set(c.days || []);
+        if (set.has(dayNum)) {
+          if (set.size <= 1) return alert("แต่ละ Task ต้องมีวันเข้างานอย่างน้อย 1 วันครับ");
+          set.delete(dayNum);
+        } else {
+          set.add(dayNum);
+        }
+        const sorted = [...set].sort((a, b) => a - b);
+        c.days = sorted;
+        c.startDay = sorted[0];
+        c.endDay = sorted[sorted.length - 1];
+      }
+      updateDashboard();
+    }
+
+    // ============================================================================
+    // 6. VENDOR & DROPDOWN HELPERS
+    // ============================================================================
+    function populateVendorDropdowns() {
+      const filterEl = document.getElementById("filterVendor");
+      const curFilter = filterEl ? (filterEl.value || "ALL") : "ALL";
+      const counts = {};
+      tasks.forEach(t => {
+        if (!t.isCancelled) {
+          const v = t.vendor || "Unassigned";
+          counts[v] = (counts[v] || 0) + 1;
+          if (!vendorList.includes(v)) vendorList.push(v);
+        }
+      });
+      vendorList.sort();
+
+      if (filterEl) {
+        filterEl.innerHTML = `<option value="ALL">🏢 เลือก Vendor ทั้งหมด (${Object.keys(counts).length} ราย)</option>` +
+          vendorList.map(v => `<option value="${v}">🏢 ${v} (${counts[v] || 0} งาน)</option>`).join("");
+        if (vendorList.includes(curFilter)) filterEl.value = curFilter;
+      }
+
+      const newTaskVendorEl = document.getElementById("newTaskVendorSelect");
+      if (newTaskVendorEl) {
+        newTaskVendorEl.innerHTML = vendorList.map(v => `<option value="${v}">${v}</option>`).join("");
+      }
+
+      const hoVendorEl = document.getElementById("hoVendorSelect");
+      if (hoVendorEl) {
+        const curHo = hoVendorEl.value || "STP";
+        hoVendorEl.innerHTML = vendorList.map(v =>
+          `<option value="${v}" ${v === curHo ? "selected" : ""}>🏢 ${v} (${counts[v] || 0} งาน)</option>`
+        ).join("") + `<option value="ALL">🏢 รวมทุก Vendor ทั้งหมด (275 งาน)</option>`;
+      }
+    }
+
+    function buildVendorSelectOptionsHtml(selectedVendor) {
+      return vendorList.map(v => `<option value="${v}" ${v === selectedVendor ? "selected" : ""}>${v}</option>`).join("") +
+        `<option value="__ADD_NEW__">+ เพิ่มชื่อ Vendor ใหม่...</option>`;
+    }
+
+    function updateTaskVendor(taskId, newVendorVal) {
+      const t = tasks.find(x => x.id === taskId);
+      if (!t) return;
+      if (newVendorVal === "__ADD_NEW__") {
+        const custom = prompt("ระบุชื่อ Vendor / ผู้รับเหมาใหม่:");
+        if (custom && custom.trim()) {
+          const clean = custom.trim().toUpperCase();
+          if (!vendorList.includes(clean)) vendorList.push(clean);
+          t.vendor = clean;
+        }
+      } else {
+        t.vendor = newVendorVal;
+      }
+      populateVendorDropdowns();
+      updateDashboard();
+    }
+
+    function populateDaySelector() {
+      const sel = document.getElementById("currentDaySelect");
+      sel.innerHTML = `<option value="0" ${selectedCalendarDay === 0 ? "selected" : ""}>รวมทุกวัน (All 35 Days)</option>` +
+        DAYS_35.map(d => `<option value="${d.day}" ${d.day === selectedCalendarDay ? "selected" : ""}>Day ${d.day} (${d.label})</option>`).join("");
+    }
+
+    function populateResponsibleDropdown() {
+      const sel = document.getElementById("filterResp");
+      const cur = sel.value || "ALL";
+      const counts = {};
+      tasks.forEach(t => { if (!t.isCancelled) counts[t.resp] = (counts[t.resp] || 0) + 1; });
+      const uniqueResps = Object.keys(counts).sort();
+      sel.innerHTML = `<option value="ALL">👤 ผู้รับผิดชอบทั้งหมด (${uniqueResps.length} ทีม)</option>` +
+        uniqueResps.map(r => `<option value="${r}">${r} (${counts[r]} งาน)</option>`).join("");
+      if (uniqueResps.includes(cur)) sel.value = cur;
+    }
+
+    // ============================================================================
+    // 7. DAILY CLASSIFICATION & DYNAMIC S-CURVE ENGINE
+    // ============================================================================
+    function getTaskProgress(task) {
+      if (!task.subtasks || task.subtasks.length === 0) return 0;
+      const doneCount = task.subtasks.filter(s => s.done).length;
+      return Math.round((doneCount / task.subtasks.length) * 100);
+    }
+
+    function classifyTaskOnDay(task, dayNum) {
+      if (task.isCancelled) return "NONE";
+      if ((task.activeDays || []).includes(dayNum)) return "SCHEDULED_TODAY";
+      if (task.startDay < dayNum && getTaskProgress(task) < 100) return "CARRYOVER";
+      return "NONE";
+    }
+
+    function selectCalendarDay(dayNum) {
+      selectedCalendarDay = dayNum;
+      currentPage = 1;
+      updateDashboard();
+    }
+
+    function setDailyGroupBy(mode) {
+      dailyGroupBy = mode;
+      document.getElementById("btnDailyGroupResp").className = mode === "RESP"
+        ? "px-2.5 py-0.5 rounded-md font-bold bg-blue-600 text-white transition"
+        : "px-2.5 py-0.5 rounded-md font-bold text-slate-600 hover:text-slate-900 transition";
+      document.getElementById("btnDailyGroupVendor").className = mode === "VENDOR"
+        ? "px-2.5 py-0.5 rounded-md font-bold bg-violet-600 text-white transition"
+        : "px-2.5 py-0.5 rounded-md font-bold text-slate-600 hover:text-slate-900 transition";
+      renderDailyOverviewAndCalendar();
+    }
+
+    function selectFromDailyCard(keyName) {
+      if (dailyGroupBy === "RESP") {
+        const el = document.getElementById("filterResp");
+        el.value = (el.value === keyName) ? "ALL" : keyName;
+      } else {
+        const el = document.getElementById("filterVendor");
+        el.value = (el.value === keyName) ? "ALL" : keyName;
+      }
+      currentPage = 1;
+      renderDailyOverviewAndCalendar();
+      renderWorklistByDaySection();
+      renderTasks();
+    }
+
+    function clearPersonAndVendorFilter() {
+      document.getElementById("filterResp").value = "ALL";
+      document.getElementById("filterVendor").value = "ALL";
+      currentPage = 1;
+      renderDailyOverviewAndCalendar();
+      renderWorklistByDaySection();
+      renderTasks();
+    }
+
+    function getFilteredTasksList() {
+      const q = (document.getElementById("searchInput").value || "").toLowerCase().trim();
+      const vendorF = document.getElementById("filterVendor").value;
+      const respF = document.getElementById("filterResp").value;
+      const secF = document.getElementById("filterSec").value;
+      const catF = document.getElementById("filterCat").value;
+      const statF = document.getElementById("filterStatus").value;
+      const dailyMode = document.getElementById("dailyFilterMode").value;
+      const hideCompleted = document.getElementById("hideCompletedInDaily").checked;
+
+      return tasks.filter(t => {
+        if (selectedCalendarDay > 0) {
+          const dayRole = classifyTaskOnDay(t, selectedCalendarDay);
+          if (dailyMode === "TODAY_AND_CARRYOVER" && dayRole === "NONE") return false;
+          if (dailyMode === "TODAY_ONLY" && dayRole !== "SCHEDULED_TODAY") return false;
+          if (dailyMode === "CARRYOVER_ONLY" && dayRole !== "CARRYOVER") return false;
+        }
+        const pct = getTaskProgress(t);
+        if (hideCompleted && pct === 100) return false;
+        if (vendorF !== "ALL" && t.vendor !== vendorF) return false;
+        if (respF !== "ALL" && t.resp !== respF) return false;
+        if (secF !== "ALL" && String(t.sec) !== secF) return false;
+        if (catF !== "ALL" && t.cat !== catF) return false;
+        if (statF === "ACTIVE_ONLY" && t.isCancelled) return false;
+        if (statF === "CANCELLED" && !t.isCancelled) return false;
+        if (statF === "PENDING" && (t.isCancelled || pct !== 0)) return false;
+        if (statF === "IN_PROGRESS" && (t.isCancelled || pct === 0 || pct === 100)) return false;
+        if (statF === "COMPLETED" && (t.isCancelled || pct !== 100)) return false;
+        if (statF === "HAS_PHOTO" && (!t.photos || t.photos.length === 0)) return false;
+        if (q && !`${t.id} ${t.no} ${t.tag} ${t.desc} ${t.mo} ${t.loto} ${t.resp} ${t.vendor} ${t.sec} ${t.cat}`.toLowerCase().includes(q)) return false;
+        return true;
+      });
+    }
+
+    // ============================================================================
+    // 8. RENDER WORKLIST BY DAY (1, 2, 3...) WITH "📅 แก้ไขวันเข้างาน" BUTTON
+    // ============================================================================
+    function setWbdMode(mode) {
+      wbdViewMode = mode;
+      document.getElementById("btnWbdModeList").className = mode === "NUMBERED_LIST"
+        ? "px-3 py-1 rounded-md font-bold bg-indigo-600 text-white shadow-sm transition"
+        : "px-3 py-1 rounded-md font-semibold text-slate-600 hover:text-slate-900 transition";
+      document.getElementById("btnWbdModeDays").className = mode === "BY_ALL_DAYS"
+        ? "px-3 py-1 rounded-md font-bold bg-indigo-600 text-white shadow-sm transition"
+        : "px-3 py-1 rounded-md font-semibold text-slate-600 hover:text-slate-900 transition";
+      renderWorklistByDaySection();
+    }
+
+    function toggleCollapseWbd() {
+      wbdCollapsed = !wbdCollapsed;
+      document.getElementById("wbdBodyContainer").classList.toggle("hidden", wbdCollapsed);
+    }
+
+    function toggleWbdSubtaskDrawer(taskId) {
+      if (expandedWbdTaskIds.has(taskId)) expandedWbdTaskIds.delete(taskId);
+      else expandedWbdTaskIds.add(taskId);
+      renderWorklistByDaySection();
+    }
+
+    function toggleWbdDayAccordion(dayNum) {
+      if (expandedWbdDayNums.has(dayNum)) expandedWbdDayNums.delete(dayNum);
+      else expandedWbdDayNums.add(dayNum);
+      renderWorklistByDaySection();
+    }
+
+    function scrollToTaskCard(taskId) {
+      const idxInFiltered = getFilteredTasksList().findIndex(t => t.id === taskId);
+      if (idxInFiltered >= 0) {
+        const targetPage = Math.floor(idxInFiltered / pageSize) + 1;
+        if (currentPage !== targetPage) {
+          currentPage = targetPage;
+          renderTasks();
+        }
+      }
+      setTimeout(() => {
+        const el = document.getElementById(`card_${taskId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("card-highlight");
+          setTimeout(() => el.classList.remove("card-highlight"), 3500);
+        }
+      }, 80);
+    }
+
+    function renderWorklistByDaySection() {
+      const miniStrip = document.getElementById("wbdMiniDayStrip");
+      miniStrip.innerHTML = `<button onclick="selectCalendarDay(0)" class="shrink-0 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${selectedCalendarDay === 0 ? "bg-indigo-600 text-white border-indigo-700" : "bg-slate-50 text-slate-600 border-slate-200"}">รวมทุกวัน</button>` +
+        DAYS_35.map(d => `<button onclick="selectCalendarDay(${d.day})" class="shrink-0 px-2 py-1 rounded-lg border text-[11px] font-semibold ${selectedCalendarDay === d.day ? "bg-indigo-600 text-white border-indigo-700 shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:bg-indigo-50"}">${d.label}</button>`).join("");
+
+      const body = document.getElementById("wbdBodyContainer");
+      const filtered = getFilteredTasksList();
+      document.getElementById("wbdCountBadge").textContent = `${filtered.length} รายการ`;
+
+      if (wbdViewMode === "NUMBERED_LIST") {
+        if (filtered.length === 0) {
+          body.innerHTML = `<div class="text-center py-6 text-slate-400 text-xs">ไม่มีรายการงานที่ตรงกับเงื่อนไขในวันนี้</div>`;
+          return;
+        }
+        body.innerHTML = filtered.map((t, idx) => {
+          const pct = getTaskProgress(t);
+          const doneCnt = (t.subtasks || []).filter(s => s.done).length;
+          const totCnt = (t.subtasks || []).length;
+          const dayRole = selectedCalendarDay > 0 ? classifyTaskOnDay(t, selectedCalendarDay) : "SCHEDULED_TODAY";
+          const isExpanded = expandedWbdTaskIds.has(t.id);
+
+          const rolePill = dayRole === "CARRYOVER"
+            ? `<span class="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded shrink-0">⚠️ ค้างสะสม (เริ่ม ${fmtDayIdx(t.startDay)})</span>`
+            : `<span class="bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-bold px-2 py-0.5 rounded shrink-0">📅 แผนวันนี้</span>`;
+
+          const subDrawer = isExpanded ? `
+            <div class="mt-2 pt-2 border-t border-slate-200 bg-white rounded-lg p-2.5 space-y-1">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[11px] font-bold text-indigo-700">🔧 รายการ Sub-Tasks มาตรฐาน (${doneCnt}/${totCnt} ขั้นตอน):</span>
+                <button onclick="markAllSubTasksDone('${t.id}')" class="text-[11px] text-emerald-600 hover:underline font-bold">✓ ติ๊กเสร็จทั้งหมด (100%)</button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                ${(t.subtasks || []).map((s, sIdx) => `
+                  <label class="flex items-start gap-2 p-1.5 rounded border border-slate-100 hover:bg-slate-50 cursor-pointer text-xs">
+                    <input type="checkbox" ${s.done ? "checked" : ""} onchange="toggleSubTask('${t.id}', ${sIdx})" class="mt-0.5 w-3.5 h-3.5 rounded text-indigo-600" />
+                    <span class="${s.done ? 'line-through text-slate-400' : 'text-slate-700'}">${s.text}</span>
+                  </label>
+                `).join("")}
+              </div>
+            </div>
+          ` : "";
+
+          return `
+            <div class="rounded-xl border ${dayRole === 'CARRYOVER' ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200 bg-slate-50/70'} p-2.5 hover:border-indigo-300 transition">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2 flex-1 min-w-[260px]">
+                  <span class="w-7 h-7 rounded-lg bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0 shadow-sm">${idx + 1}</span>
+                  ${rolePill}
+                  <span class="bg-slate-800 text-white text-[11px] font-bold px-1.5 py-0.5 rounded shrink-0">Sec ${t.sec}</span>
+                  <span class="bg-white text-blue-700 border border-blue-200 text-xs font-extrabold px-2 py-0.5 rounded shrink-0">${t.tag}</span>
+                  <span class="text-xs font-bold text-slate-800 line-clamp-1" title="${t.desc}">${t.desc}</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <!-- EDIT SCHEDULE BUTTON -->
+                  <button onclick="openScheduleModal('${t.id}', false)" class="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 text-xs font-extrabold px-2.5 py-1 rounded-lg transition" title="คลิกเพื่อแก้ไขวันเข้างานของรายการนี้">
+                    📅 ${t.planDays} (${t.activeDays.length}d) ✎
+                  </button>
+
+                  <div class="flex items-center gap-1 bg-violet-50 border border-violet-200 rounded-lg px-2 py-0.5">
+                    <span class="text-[10px] font-bold text-violet-700">🏢 Vendor:</span>
+                    <select onchange="updateTaskVendor('${t.id}', this.value)" class="text-xs font-extrabold text-violet-900 bg-transparent focus:outline-none cursor-pointer">
+                      ${buildVendorSelectOptionsHtml(t.vendor)}
+                    </select>
+                  </div>
+                  <span class="text-xs bg-white border border-slate-200 px-2 py-1 rounded-lg text-slate-700 font-semibold">👤 ${t.resp}</span>
+                  <span class="text-xs font-bold px-2 py-1 rounded-lg ${pct === 100 ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-50 text-indigo-700'}">${doneCnt}/${totCnt} (${pct}%)</span>
+                  <button onclick="toggleWbdSubtaskDrawer('${t.id}')" class="text-xs bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold px-2.5 py-1 rounded-lg">${isExpanded ? "▲ ซ่อน" : "▼ คลี่ติ๊ก Sub-Task"}</button>
+                  <button onclick="scrollToTaskCard('${t.id}')" class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-semibold px-2.5 py-1 rounded-lg">ไปที่การ์ด ⬇</button>
+                </div>
+              </div>
+              ${subDrawer}
+            </div>
+          `;
+        }).join("");
+      } else {
+        body.innerHTML = DAYS_35.map(d => {
+          const dayTasks = tasks.filter(t => !t.isCancelled && classifyTaskOnDay(t, d.day) !== "NONE");
+          const schedCnt = dayTasks.filter(t => classifyTaskOnDay(t, d.day) === "SCHEDULED_TODAY").length;
+          const carryCnt = dayTasks.length - schedCnt;
+          const isOpen = expandedWbdDayNums.has(d.day);
+          const rowsInside = isOpen ? `
+            <div class="mt-2 pt-2 border-t border-slate-200 space-y-1.5">
+              ${dayTasks.map((t, i) => `
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-2 rounded-lg border border-slate-200 text-xs">
+                  <div class="flex items-center gap-2 flex-1 min-w-[240px]">
+                    <span class="w-5 h-5 rounded bg-slate-200 text-slate-800 font-bold text-[11px] flex items-center justify-center">${i + 1}</span>
+                    <span class="font-bold text-blue-700">${t.tag}</span>
+                    <span class="text-slate-700 truncate max-w-md">${t.desc}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button onclick="openScheduleModal('${t.id}', false)" class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">📅 ${t.planDays} ✎</button>
+                    <span class="px-2 py-0.5 rounded bg-violet-50 text-violet-800 border border-violet-200 font-bold">🏢 ${t.vendor}</span>
+                    <span class="font-bold text-indigo-600">${getTaskProgress(t)}%</span>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          ` : "";
+          return `
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2 cursor-pointer" onclick="toggleWbdDayAccordion(${d.day})">
+                <div class="flex items-center gap-2.5">
+                  <span class="px-2.5 py-1 rounded-lg bg-slate-900 text-white font-bold text-xs">Day ${d.day} (${d.label})</span>
+                  <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">แผนวันนี้ ${schedCnt} งาน</span>
+                  ${carryCnt > 0 ? `<span class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded">+ งานค้าง ${carryCnt} งาน</span>` : ""}
+                </div>
+                <span class="text-xs font-bold text-slate-500">${isOpen ? "▲ ซ่อน" : "▼ คลี่ดูรายการ"}</span>
+              </div>
+              ${rowsInside}
+            </div>
+          `;
+        }).join("");
+      }
+    }
+
+    function renderDailyOverviewAndCalendar() {
+      const strip = document.getElementById("calendarStrip");
+      const curRespFilter = document.getElementById("filterResp").value;
+      const curVendorFilter = document.getElementById("filterVendor").value;
+
+      let html = `<button onclick="selectCalendarDay(0)" class="shrink-0 px-3 py-2 rounded-xl border text-xs font-bold flex flex-col items-center justify-center min-w-[95px] ${selectedCalendarDay === 0 ? "bg-slate-900 text-white border-slate-900 shadow-md" : "bg-slate-50 text-slate-700 border-slate-200"}"><span>รวมทุกวัน</span><span class="text-[10px] font-normal opacity-80">All 281 W/L</span></button>`;
+
+      DAYS_35.forEach(d => {
+        let schedCount = 0, carryCount = 0;
+        tasks.forEach(t => {
+          const c = classifyTaskOnDay(t, d.day);
+          if (c === "SCHEDULED_TODAY") schedCount++;
+          else if (c === "CARRYOVER") carryCount++;
+        });
+        const isSel = selectedCalendarDay === d.day;
+        const phaseColor = d.day <= 8 ? "border-amber-300" : (d.day <= 25 ? "border-blue-300" : "border-emerald-300");
+        html += `
+          <button onclick="selectCalendarDay(${d.day})" class="shrink-0 px-2.5 py-1.5 rounded-xl border text-xs transition flex flex-col items-center min-w-[74px] ${isSel ? "bg-blue-600 text-white border-blue-700 shadow-md scale-[1.03]" : `bg-white text-slate-700 ${phaseColor} hover:bg-blue-50/50`}">
+            <span class="font-bold text-[11px]">${d.label}</span>
+            <div class="flex items-center gap-1 mt-0.5 text-[10px]">
+              <span class="${isSel ? 'text-white font-bold' : 'text-blue-600 font-semibold'}">${schedCount}</span>
+              ${carryCount > 0 ? `<span class="${isSel ? 'text-amber-200 font-bold' : 'text-amber-600 font-semibold'}">+${carryCount}</span>` : ""}
+            </div>
+          </button>
+        `;
+      });
+      strip.innerHTML = html;
+
+      const personGrid = document.getElementById("dailyPersonGrid");
+      document.getElementById("clearPersonBtn").classList.toggle("hidden", curRespFilter === "ALL" && curVendorFilter === "ALL");
+
+      const byGroup = {};
+      let totalSched = 0, totalCarry = 0, totalDone = 0;
+      tasks.forEach(t => {
+        if (t.isCancelled) return;
+        const pct = getTaskProgress(t);
+        const key = dailyGroupBy === "VENDOR" ? (t.vendor || "Unassigned") : (t.resp || "Unassigned");
+        if (selectedCalendarDay === 0) {
+          totalSched++;
+          if (pct === 100) totalDone++;
+          if (!byGroup[key]) byGroup[key] = { sched: 0, carry: 0, done: 0 };
+          byGroup[key].sched++;
+          if (pct === 100) byGroup[key].done++;
+        } else {
+          const c = classifyTaskOnDay(t, selectedCalendarDay);
+          if (c === "NONE") return;
+          if (!byGroup[key]) byGroup[key] = { sched: 0, carry: 0, done: 0 };
+          if (c === "SCHEDULED_TODAY") { totalSched++; byGroup[key].sched++; }
+          else if (c === "CARRYOVER") { totalCarry++; byGroup[key].carry++; }
+          if (pct === 100) { totalDone++; byGroup[key].done++; }
+        }
+      });
+
+      const dObj = DAYS_35.find(x => x.day === selectedCalendarDay);
+      document.getElementById("selectedDateBadge").textContent = selectedCalendarDay === 0 ? "📌 มุมมองรวมทุกวัน (All 35 Days)" : `📅 วันที่เลือก: Day ${dObj.day} (${dObj.label} 2026) • ${dObj.phase}`;
+      document.getElementById("selectedDateSummaryText").textContent = selectedCalendarDay === 0 ? `รวมงานที่ดำเนินการทั้งหมด ${totalSched} งาน` : `รวมภาระงานวันนี้ ${totalSched + totalCarry} งาน (แผนวันนี้ ${totalSched} + ค้างสะสม ${totalCarry})`;
+      document.getElementById("badgeSchedToday").textContent = `ตามแผนวันนี้: ${totalSched} งาน`;
+      document.getElementById("badgeCarryover").textContent = `งานค้างสะสม: ${totalCarry} งาน`;
+      document.getElementById("badgeDoneToday").textContent = `เสร็จแล้ว: ${totalDone} งาน`;
+
+      const sortedKeys = Object.keys(byGroup).sort((a, b) => (byGroup[b].sched + byGroup[b].carry) - (byGroup[a].sched + byGroup[a].carry));
+      personGrid.innerHTML = sortedKeys.map(kName => {
+        const info = byGroup[kName];
+        const totalP = info.sched + info.carry;
+        const isSelected = (dailyGroupBy === "VENDOR" && curVendorFilter === kName) || (dailyGroupBy === "RESP" && curRespFilter === kName);
+        const icon = dailyGroupBy === "VENDOR" ? "🏢" : "👤";
+        const activeBg = dailyGroupBy === "VENDOR" ? "bg-violet-600 text-white border-violet-700 shadow-md" : "bg-blue-600 text-white border-blue-700 shadow-md";
+        return `
+          <div class="p-2.5 rounded-xl border transition flex flex-col justify-between ${isSelected ? activeBg : "bg-white hover:bg-violet-50/50 border-slate-200 text-slate-800"}">
+            <div class="flex items-center justify-between gap-1 cursor-pointer" onclick="selectFromDailyCard('${kName}')">
+              <span class="font-bold text-xs truncate" title="${kName}">${icon} ${kName}</span>
+              <span class="text-xs font-extrabold px-1.5 py-0.5 rounded ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-800'}">${totalP}</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-1 mt-1.5 text-[10px]">
+              <div class="cursor-pointer" onclick="selectFromDailyCard('${kName}')">
+                <span class="${isSelected ? 'text-white/90' : 'text-blue-600 font-semibold'}">แผน: ${info.sched}</span>
+                ${info.carry > 0 ? `<span class="${isSelected ? 'text-amber-200 font-bold' : 'text-amber-600 font-bold'}"> • ค้าง: ${info.carry}</span>` : ""}
+              </div>
+              ${dailyGroupBy === "VENDOR" ? `<button onclick="openHandoverModal('${kName}')" class="px-1.5 py-0.5 rounded ${isSelected ? 'bg-white/20 text-white' : 'bg-rose-50 text-rose-700 border border-rose-200'} font-bold">🖨️ PDF</button>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // ============================================================================
+    // 9. DYNAMIC S-CURVE & 2-COLUMN CARDS RENDERER
+    // ============================================================================
+    function updateDashboard() {
+      populateDaySelector();
+      saveState();
+
+      // Dynamically compute daily planned units and overall actual % from current task schedules
+      const dailyUnits = Array(35).fill(0);
+      let totalW = 0, earnedW = 0;
+      tasks.forEach(t => {
+        if (t.isCancelled) return;
+        const days = t.activeDays || [8];
+        days.forEach(d => { if (d >= 1 && d <= 35) dailyUnits[d - 1]++; });
+        const w = days.length;
+        totalW += w;
+        earnedW += w * (getTaskProgress(t) / 100);
+      });
+
+      const totalTaskDays = dailyUnits.reduce((a, b) => a + b, 0) || 1;
+      document.getElementById("totalTaskDaysBadge").textContent = `${totalTaskDays.toLocaleString()} Task-Days`;
+
+      let cum = 0;
+      const planPctSeries = dailyUnits.map(u => {
+        cum += u;
+        return Number(((cum / totalTaskDays) * 100).toFixed(2));
+      });
+
+      const actualFromTasks = totalW > 0 ? Number(((earnedW / totalW) * 100).toFixed(2)) : 0;
+      const refDay = selectedCalendarDay === 0 ? 4 : selectedCalendarDay;
+      const dayObj = DAYS_35[refDay - 1] || DAYS_35[3];
+      const planPct = planPctSeries[refDay - 1] || 0;
+      const diff = Number((actualFromTasks - planPct).toFixed(2));
+
+      document.getElementById("kpiActualPct").textContent = `${actualFromTasks.toFixed(2)}%`;
+      document.getElementById("kpiActualBar").style.width = `${Math.min(100, actualFromTasks)}%`;
+      document.getElementById("kpiPlanPct").textContent = `${planPct.toFixed(2)}%`;
+      document.getElementById("kpiPhaseText").textContent = `Day ${dayObj.day} (${dayObj.label}): ${dayObj.phase}`;
+
+      const varEl = document.getElementById("kpiVariance");
+      varEl.textContent = diff >= 0 ? `+${diff}% Ahead` : `${diff}% Behind`;
+      varEl.className = diff >= 0 ? "text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700" : "text-xs font-semibold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700";
+
+      let completed = 0, inProg = 0, pending = 0, cancelled = 0, subDone = 0, subTotal = 0, photosTotal = 0;
+      tasks.forEach(t => {
+        if (t.isCancelled) cancelled++;
+        else {
+          const p = getTaskProgress(t);
+          if (p === 100) completed++;
+          else if (p > 0) inProg++;
+          else pending++;
+          subTotal += (t.subtasks || []).length;
+          subDone += (t.subtasks || []).filter(s => s.done).length;
+        }
+        photosTotal += (t.photos || []).length;
+      });
+
+      document.getElementById("kpiTaskCount").textContent = `${tasks.length - cancelled} / ${tasks.length}`;
+      document.getElementById("kpiCompletedTasks").textContent = `เสร็จ ${completed} งาน`;
+      document.getElementById("kpiInProgressTasks").textContent = `กำลังทำ ${inProg} | รอเริ่ม ${pending} | ยกเลิก ${cancelled}`;
+      document.getElementById("kpiSubTaskDone").textContent = `${subDone}/${subTotal}`;
+      document.getElementById("kpiPhotoCount").textContent = photosTotal;
+
+      renderDailyOverviewAndCalendar();
+      renderSCurveChart(planPctSeries, dailyUnits, actualFromTasks, refDay);
+      renderBreakdownList();
+      renderWorklistByDaySection();
+      renderTasks();
+      if (!document.getElementById("mainViewCritical").classList.contains("hidden")) {
+        renderCriticalGanttView();
+      }
+    }
+
+    function renderSCurveChart(planPctSeries, dailyUnits, actualFromTasks, refDay) {
+      const ctx = document.getElementById("sCurveChart").getContext("2d");
+      const actualSeries = DAYS_35.map(d => d.day <= refDay ? Number((actualFromTasks * (d.day / refDay)).toFixed(2)) : null);
+
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: DAYS_35.map(d => d.label),
+          datasets: [
+            { label: "Planned S-Curve (%)", data: planPctSeries, borderColor: "#4f46e5", backgroundColor: "rgba(79,70,229,0.08)", borderWidth: 2.5, fill: true, tension: 0.35, pointRadius: 2, yAxisID: "y" },
+            { label: "Actual Progress (%)", data: actualSeries, borderColor: "#10b981", backgroundColor: "#10b981", borderWidth: 3, tension: 0.3, pointRadius: 4, yAxisID: "y" },
+            { type: "bar", label: "Planned Task-Days", data: dailyUnits, backgroundColor: DAYS_35.map(d => d.day === selectedCalendarDay ? "rgba(37,99,235,0.75)" : "rgba(148,163,184,0.28)"), borderRadius: 3, yAxisID: "y1" }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+          onClick: (e, el) => { if (el && el.length > 0) selectCalendarDay(el[0].index + 1); },
+          scales: {
+            y: { type: "linear", position: "left", min: 0, max: 100 },
+            y1: { type: "linear", position: "right", min: 0, grid: { drawOnChartArea: false } }
+          }
+        }
+      });
+    }
+
+    function renderBreakdownList() {
+      const mode = document.getElementById("breakdownMode").value;
+      const groups = {};
+      tasks.forEach(t => {
+        if (t.isCancelled) return;
+        const key = mode === "vendor" ? (t.vendor || "Unassigned") : (mode === "section" ? `Section ${t.sec}` : (mode === "category" ? t.cat : t.resp));
+        if (!groups[key]) groups[key] = { count: 0, totalPct: 0 };
+        groups[key].count++;
+        groups[key].totalPct += getTaskProgress(t);
+      });
+      const keys = mode === "category" ? CATEGORIES.filter(c => groups[c]) : Object.keys(groups).sort((a, b) => groups[b].count - groups[a].count);
+      document.getElementById("breakdownContainer").innerHTML = keys.map(k => {
+        const g = groups[k];
+        const avg = Math.round(g.totalPct / g.count);
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="font-medium text-slate-700 truncate max-w-[220px]">${mode === "vendor" ? "🏢 " : ""}${k} <span class="text-slate-400">(${g.count} งาน)</span></span>
+              <span class="font-bold ${avg === 100 ? 'text-emerald-600' : 'text-violet-600'}">${avg}%</span>
+            </div>
+            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+              <div class="${avg === 100 ? 'bg-emerald-500' : 'bg-violet-600'} h-full rounded-full" style="width:${avg}%"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function resetPageAndRender() {
+      currentPage = 1;
+      renderDailyOverviewAndCalendar();
+      renderWorklistByDaySection();
+      renderTasks();
+    }
+
+    function changePageSize() {
+      pageSize = parseInt(document.getElementById("pageSizeSelect").value, 10);
+      currentPage = 1;
+      renderTasks();
+    }
+
+    function goToPage(p) {
+      currentPage = p;
+      renderTasks();
+      document.getElementById("taskListContainer").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    function renderTasks() {
+      const filtered = getFilteredTasksList();
+      document.getElementById("filteredCount").textContent = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const startIdx = (currentPage - 1) * pageSize;
+      const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+
+      const pagHtml = `
+        <div class="text-slate-600">แสดงรายการที่ <strong>${filtered.length ? startIdx + 1 : 0}–${Math.min(filtered.length, startIdx + pageSize)}</strong> จาก <strong>${filtered.length}</strong> งาน</div>
+        <div class="flex items-center gap-1">
+          <button onclick="goToPage(${Math.max(1, currentPage - 1)})" ${currentPage === 1 ? "disabled" : ""} class="px-2.5 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 font-semibold">◀ ก่อนหน้า</button>
+          <span class="px-3 py-1 font-bold text-slate-700">หน้า ${currentPage} / ${totalPages}</span>
+          <button onclick="goToPage(${Math.min(totalPages, currentPage + 1)})" ${currentPage === totalPages ? "disabled" : ""} class="px-2.5 py-1 rounded border border-slate-300 bg-white disabled:opacity-40 font-semibold">ถัดไป ▶</button>
+        </div>
+      `;
+      document.getElementById("paginationBar").innerHTML = pagHtml;
+      document.getElementById("paginationBarBottom").innerHTML = pagHtml;
+
+      const container = document.getElementById("taskListContainer");
+      if (pageItems.length === 0) {
+        container.innerHTML = `<div class="col-span-2 bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-500 text-sm">ไม่พบรายการงานที่ตรงกับเงื่อนไข</div>`;
+        return;
+      }
+
+      container.innerHTML = pageItems.map(t => {
+        const pct = getTaskProgress(t);
+        const dayRole = selectedCalendarDay > 0 ? classifyTaskOnDay(t, selectedCalendarDay) : "NONE";
+        const dayRoleBadge = selectedCalendarDay > 0
+          ? (dayRole === "SCHEDULED_TODAY"
+              ? `<span class="bg-blue-600 text-white text-[11px] font-bold px-2 py-0.5 rounded">📅 แผนวันนี้ (${fmtDayIdx(selectedCalendarDay)})</span>`
+              : (dayRole === "CARRYOVER" ? `<span class="bg-amber-500 text-slate-950 text-[11px] font-extrabold px-2 py-0.5 rounded">⚠️ งานค้างสะสม (เริ่ม ${fmtDayIdx(t.startDay)})</span>` : ""))
+          : "";
+
+        const badgeClass = t.isCancelled ? "bg-rose-50 text-rose-600 border-rose-200" : (pct === 100 ? "bg-emerald-100 text-emerald-700 border-emerald-200" : (pct > 0 ? "bg-amber-100 text-amber-700 border-amber-200" : "bg-slate-100 text-slate-600 border-slate-200"));
+        const statusLabel = t.isCancelled ? "ยกเลิก W/L" : (pct === 100 ? "Completed (100%)" : (pct > 0 ? `In Progress (${pct}%)` : "Pending (0%)"));
+
+        return `
+          <div id="card_${t.id}" class="bg-white rounded-xl shadow-sm border-2 ${dayRole === 'CARRYOVER' ? 'border-amber-300' : (dayRole === 'SCHEDULED_TODAY' ? 'border-blue-200' : 'border-slate-200')} p-4 flex flex-col justify-between space-y-3 hover:border-blue-400 transition">
+            <div>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="bg-slate-200 text-slate-700 text-[11px] font-bold px-1.5 py-0.5 rounded">#${t.seq} (No.${t.no})</span>
+                  <span class="bg-slate-900 text-white text-xs font-bold px-2 py-0.5 rounded">Sec ${t.sec}</span>
+                  <span class="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-2 py-0.5 rounded">${t.tag}</span>
+                  ${dayRoleBadge}
+                </div>
+                <span class="text-xs font-bold px-2.5 py-0.5 rounded-full border ${badgeClass}">${statusLabel}</span>
+              </div>
+
+              <h3 class="font-bold text-sm text-slate-800 mt-2 leading-snug">${t.desc}</h3>
+
+              <!-- Metadata + Vendor Dropdown + Editable Schedule Button -->
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 mt-2.5 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <div class="flex flex-wrap items-center gap-2.5">
+                  <div class="flex items-center gap-1 bg-violet-100/80 border border-violet-300 rounded-md px-2 py-0.5">
+                    <span class="text-[11px] font-bold text-violet-800">🏢 Vendor:</span>
+                    <select onchange="updateTaskVendor('${t.id}', this.value)" class="text-xs font-extrabold text-violet-950 bg-transparent focus:outline-none cursor-pointer">
+                      ${buildVendorSelectOptionsHtml(t.vendor)}
+                    </select>
+                  </div>
+                  <span>👤 <strong class="text-blue-700">${t.resp || "-"}</strong></span>
+                  <span>📋 MO: <strong>${t.mo || "-"}</strong></span>
+                  <span>🔒 LOTO: <strong class="text-rose-600">${t.loto || "-"}</strong></span>
+                </div>
+
+                <!-- EDIT SCHEDULE BUTTON ON CARD -->
+                <button onclick="openScheduleModal('${t.id}', false)" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-2.5 py-1 rounded-lg shadow-sm transition flex items-center gap-1">
+                  <span>📅 แก้ไขวันเข้างาน: ${t.planDays} (${t.activeDays.length} วัน) ✎</span>
+                </button>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1 mt-2">
+                <span class="text-[11px] text-slate-400 mr-1">Support:</span>
+                ${(t.supports || []).map(s => `<span class="px-1.5 py-0.5 text-[10px] font-bold rounded bg-indigo-50 text-indigo-700 border border-indigo-200">${s}</span>`).join("") || "-"}
+              </div>
+
+              <div class="w-full bg-slate-100 h-2 rounded-full mt-3 overflow-hidden">
+                <div class="${pct === 100 ? 'bg-emerald-500' : 'bg-blue-600'} h-full rounded-full transition-all" style="width:${pct}%"></div>
+              </div>
+
+              <div class="mt-3 pt-2 border-t border-slate-100">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-bold text-slate-700">งานย่อยมาตรฐาน (Sub-Tasks Checklist: ${(t.subtasks || []).filter(s => s.done).length}/${(t.subtasks || []).length})</span>
+                  <div class="flex items-center gap-2">
+                    <button onclick="markAllSubTasksDone('${t.id}')" class="text-[11px] text-emerald-600 hover:underline font-bold">✓ ติ๊กเสร็จทั้งหมด (100%)</button>
+                    <button onclick="promptAddSubTask('${t.id}')" class="text-[11px] text-blue-600 hover:underline font-semibold">+ เพิ่มงานย่อย</button>
+                  </div>
+                </div>
+                <div class="space-y-0.5 max-h-48 overflow-y-auto custom-scroll pr-1">
+                  ${(t.subtasks || []).map((s, sIdx) => `
+                    <label class="flex items-start gap-2.5 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition">
+                      <input type="checkbox" ${s.done ? "checked" : ""} ${t.isCancelled ? "disabled" : ""} onchange="toggleSubTask('${t.id}', ${sIdx})" class="mt-0.5 w-4 h-4 rounded text-blue-600" />
+                      <span class="text-xs flex-1 ${s.done ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}">${s.text}</span>
+                    </label>
+                  `).join("")}
+                </div>
+              </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100 space-y-2">
+              <div class="flex items-center gap-2">
+                <input type="text" value="${(t.remarks || '').replace(/"/g, '&quot;')}" onchange="updateTaskRemark('${t.id}', this.value)" placeholder="พิมพ์อัปเดตหน้างาน / หมายเหตุ..." class="flex-1 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 focus:bg-white" />
+                <label class="cursor-pointer bg-slate-100 hover:bg-blue-50 text-blue-700 border border-slate-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shrink-0">
+                  <span>📷 แนบรูป</span>
+                  <input type="file" accept="image/*" multiple class="hidden" onchange="handleTaskPhotoUpload(event, '${t.id}')" />
+                </label>
+              </div>
+              ${(t.photos && t.photos.length) ? `<div class="flex flex-wrap gap-2 pt-1">${t.photos.map((p, pIdx) => `<div class="relative group w-14 h-14 rounded-lg overflow-hidden border border-slate-200"><img src="${p.url}" class="w-full h-full object-cover cursor-pointer" onclick="openPhotoGalleryModal()" /><button onclick="deletePhoto('${t.id}', ${pIdx})" class="absolute top-0.5 right-0.5 bg-rose-600 text-white rounded-full w-4 h-4 text-[10px] hidden group-hover:flex items-center justify-center">×</button></div>`).join("")}</div>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    // ============================================================================
+    // 10. VIEW 2: CRITICAL WORK & MASTER GANTT CHART (EDITABLE CELLS!)
+    // ============================================================================
+    function selectGanttPkg(pkg) {
+      selectedGanttPkg = pkg;
+      document.querySelectorAll(".gpkg-btn").forEach(btn => {
+        const isAct = btn.getAttribute("data-gpkg") === pkg;
+        btn.className = isAct
+          ? "gpkg-btn px-3 py-1.5 rounded-lg text-xs font-extrabold bg-rose-600 text-white shadow-sm transition"
+          : "gpkg-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 transition";
+      });
+      renderCriticalGanttView();
+    }
+
+    function renderCriticalGanttView() {
+      const onlyCp = document.getElementById("ganttOnlyCp").checked;
+      const q = (document.getElementById("ganttSearchInput").value || "").toLowerCase().trim();
+      const banner = document.getElementById("ganttSummaryBanner");
+
+      let ganttItems = [];
+      if (selectedGanttPkg === "WL_ALL281" || selectedGanttPkg === "WL_CRIT") {
+        const subset = selectedGanttPkg === "WL_CRIT" ? tasks.filter(t => t.isMajorCrit) : tasks.filter(t => !t.isCancelled);
+        ganttItems = subset.map(t => ({
+          id: t.id,
+          isFrom281: true,
+          pkg: `Sec ${t.sec} • ${t.tag}`,
+          group: t.cat,
+          desc: t.desc,
+          loc: `${t.vendor} (${t.resp})`,
+          days: t.activeDays,
+          isCriticalPath: t.isMajorCrit,
+          progress: getTaskProgress(t)
+        }));
+        banner.innerHTML = `<div><span class="bg-indigo-600 px-2 py-0.5 rounded font-bold mr-2">📋 ตาราง Gantt จากชีต WL_TA26 (${ganttItems.length} งาน)</span> คลิกที่ช่องวันใดก็ได้ในตารางเพื่อ <strong>เพิ่ม/ลบ วันเข้างาน</strong> หรือกดปุ่ม <strong>"📅 แก้ไข"</strong></div>`;
+      } else {
+        ganttItems = critSchedules.filter(c => c.pkg === selectedGanttPkg).map(c => ({ ...c, isFrom281: false }));
+        banner.innerHTML = `<div><span class="bg-rose-600 px-2 py-0.5 rounded font-bold mr-2">🔥 Critical Path Schedule: ${selectedGanttPkg} (${ganttItems.length} Tasks)</span> คลิกที่ช่องวันใดก็ได้ในตารางเพื่อ <strong>เพิ่ม/ลบ วันเข้างาน</strong> หรือกดปุ่ม <strong>"📅 แก้ไข"</strong></div>`;
+      }
+
+      const filtered = ganttItems.filter(item => {
+        if (onlyCp && !item.isCriticalPath) return false;
+        if (q && !`${item.pkg} ${item.group} ${item.desc} ${item.loc}`.toLowerCase().includes(q)) return false;
+        return true;
+      });
+
+      let html = `
+        <div class="gantt-grid bg-slate-100 border-b-2 border-slate-300 text-[11px] font-bold text-slate-700 sticky top-0 z-20">
+          <div class="p-2 border-r border-slate-300 sticky-col-1 bg-slate-100">ลำดับ / รายการ Task (${filtered.length} งาน)</div>
+          <div class="p-2 border-r border-slate-300 sticky-col-2 bg-slate-100 text-center">Vendor / PIC</div>
+          <div class="p-2 border-r border-slate-300 text-center">ตั้งค่าวัน</div>
+          <div class="p-2 border-r border-slate-300 text-center">Progress</div>
+          ${DAYS_35.map(d => `<div class="py-1 text-center border-r border-slate-200 flex flex-col justify-center ${d.day > 30 ? 'bg-emerald-50 text-emerald-800' : ''}"><span class="text-[9px] opacity-75">${d.month}</span><span>${d.short}</span></div>`).join("")}
+        </div>
+      `;
+
+      let lastGrp = "";
+      filtered.forEach((item, idx) => {
+        if (item.group !== lastGrp) {
+          lastGrp = item.group;
+          html += `<div class="bg-slate-200/80 px-3 py-1 text-xs font-extrabold text-slate-800 border-b border-slate-300">📂 ${item.group}</div>`;
+        }
+        const pct = Number(item.progress) || 0;
+        const isShop = (item.loc || "").toLowerCase().includes("stp") || (item.loc || "").toLowerCase().includes("shop");
+        const nextPct = pct === 0 ? 50 : (pct === 50 ? 100 : 0);
+
+        html += `
+          <div class="gantt-grid border-b border-slate-200 text-xs hover:bg-blue-50/40 transition items-center bg-white">
+            <div class="p-2 border-r border-slate-200 sticky-col-1 flex items-center gap-1.5 min-w-0">
+              <span class="text-[10px] font-bold text-slate-400 w-5 shrink-0">${idx + 1}.</span>
+              ${item.isCriticalPath ? `<span class="px-1 bg-rose-600 text-white text-[9px] font-extrabold rounded shrink-0">CP</span>` : `<span class="px-1 bg-slate-200 text-slate-600 text-[9px] font-bold rounded shrink-0">STD</span>`}
+              <span class="truncate font-semibold ${pct === 100 ? 'line-through text-slate-400' : 'text-slate-800'}" title="${item.desc}">${item.desc}</span>
+            </div>
+            <div class="p-1.5 border-r border-slate-200 sticky-col-2 text-center truncate text-[10px] font-semibold ${isShop ? 'text-violet-700 bg-violet-50/50' : 'text-slate-600'}" title="${item.loc}">${item.loc}</div>
+            <div class="p-1 border-r border-slate-200 text-center">
+              <button onclick="openScheduleModal('${item.id}', ${!item.isFrom281})" class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold hover:bg-blue-100">📅 แก้ไข (${item.days.length}d)</button>
+            </div>
+            <div class="p-1 border-r border-slate-200 text-center">
+              <button onclick="toggleGanttItemProgress('${item.id}', ${Boolean(item.isFrom281)}, ${nextPct})" class="px-2 py-0.5 rounded text-[10px] font-extrabold ${pct === 100 ? 'bg-emerald-600 text-white' : (pct > 0 ? 'bg-amber-500 text-slate-950' : 'bg-slate-200 text-slate-700')}">${pct}%</button>
+            </div>
+            ${DAYS_35.map(d => {
+              const active = (item.days || []).includes(d.day);
+              const bg = pct === 100 ? "bg-emerald-500" : (item.isCriticalPath ? "bg-rose-500" : (isShop ? "bg-violet-500" : "bg-blue-500"));
+              return `
+                <div onclick="toggleGanttCellDay('${item.id}', ${Boolean(item.isFrom281)}, ${d.day})" class="h-7 border-r border-slate-100 flex items-center justify-center px-0.5 cursor-pointer hover:bg-blue-100" title="คลิกเพื่อ เพิ่ม/ลบ วันเข้างาน (${d.label})">
+                  ${active ? `<div class="w-full h-4 rounded-sm ${bg} text-white text-[8px] font-bold flex items-center justify-center">${pct === 100 ? "✓" : ""}</div>` : ""}
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `;
+      });
+
+      document.getElementById("masterGanttTableContainer").innerHTML = html;
+    }
+
+    function toggleGanttItemProgress(id, isFrom281, nextPct) {
+      if (isFrom281) {
+        const t = tasks.find(x => x.id === id);
+        if (t && t.subtasks) {
+          t.subtasks.forEach((s, idx) => {
+            s.done = nextPct === 100 ? true : (nextPct === 50 ? idx < Math.ceil(t.subtasks.length / 2) : false);
+          });
+        }
+      } else {
+        const c = critSchedules.find(x => x.id === id);
+        if (c) c.progress = nextPct;
+      }
+      updateDashboard();
+    }
+
+    // ============================================================================
+    // 11. TASK INTERACTIONS, EXCEL SYNC, HANDOVER PDF & EXPORT
+    // ============================================================================
+    function toggleSubTask(taskId, subIdx) {
+      const t = tasks.find(x => x.id === taskId);
+      if (!t || !t.subtasks[subIdx]) return;
+      t.subtasks[subIdx].done = !t.subtasks[subIdx].done;
+      updateDashboard();
+    }
+
+    function markAllSubTasksDone(taskId) {
+      const t = tasks.find(x => x.id === taskId);
+      if (!t || !t.subtasks) return;
+      const allDone = t.subtasks.every(s => s.done);
+      t.subtasks.forEach(s => { s.done = !allDone; });
+      updateDashboard();
+    }
+
+    function promptAddSubTask(taskId) {
+      const text = prompt("ระบุชื่องานย่อย (Sub-Task) ที่ต้องการเพิ่ม:");
+      if (!text || !text.trim()) return;
+      const t = tasks.find(x => x.id === taskId);
+      if (!t) return;
+      t.subtasks.push({ id: "s_" + Date.now(), text: `${t.subtasks.length + 1}. ${text.trim()}`, done: false });
+      updateDashboard();
+    }
+
+    function updateTaskRemark(taskId, val) {
+      const t = tasks.find(x => x.id === taskId);
+      if (!t) return;
+      t.remarks = val;
+      saveState();
+    }
+
+    function handleTaskPhotoUpload(event, taskId) {
+      const t = tasks.find(x => x.id === taskId);
+      if (!t) return;
+      Array.from(event.target.files || []).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const scale = img.width > 720 ? 720 / img.width : 1;
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            t.photos = t.photos || [];
+            t.photos.push({ url: canvas.toDataURL("image/jpeg", 0.75), time: new Date().toLocaleString("th-TH") });
+            updateDashboard();
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function deletePhoto(taskId, photoIdx) {
+      const t = tasks.find(x => x.id === taskId);
+      if (!t || !t.photos) return;
+      t.photos.splice(photoIdx, 1);
+      updateDashboard();
+    }
+
+    function handleExcelUploadSync(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: "array" });
+        let syncedCount = 0;
+
+        wb.SheetNames.forEach(sName => {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sName], { header: 1, defval: "" });
+          if (rows.length < 4) return;
+          let vendorCol = -1;
+          for (let r = 0; r < Math.min(5, rows.length); r++) {
+            rows[r].forEach((val, cIdx) => {
+              const txt = String(val || "").toLowerCase();
+              if (txt.includes("vendor") || txt.includes("contractor") || txt.includes("ผู้รับเหมา")) vendorCol = cIdx;
+            });
+          }
+
+          for (let r = 3; r < rows.length; r++) {
+            const row = rows[r];
+            if (!row || row.length < 3) continue;
+            const sec = String(row[0] ?? "").replace(".0", "").trim();
+            const no = String(row[1] ?? "").replace(".0", "").trim();
+            const desc = String(row[2] ?? "").trim();
+            const resp = String(row[3] ?? "").trim();
+            const mo = String(row[4] ?? "").replace(".0", "").trim();
+            if (!desc || desc === "-") continue;
+
+            const existing = tasks.find(t => (mo && t.mo === mo) || t.desc === desc);
+            if (existing) {
+              if (resp) existing.resp = resp;
+              if (vendorCol >= 0 && String(row[vendorCol] ?? "").trim()) {
+                existing.vendor = String(row[vendorCol]).trim().toUpperCase();
+                if (!vendorList.includes(existing.vendor)) vendorList.push(existing.vendor);
+              }
+              syncedCount++;
+            } else if (sec && !isNaN(parseInt(sec, 10))) {
+              const newVendor = (vendorCol >= 0 && String(row[vendorCol] ?? "").trim())
+                ? String(row[vendorCol]).trim().toUpperCase()
+                : resolveLinkedVendor(desc, resp, "", "Add_Work ( After Freeze W/L )");
+              tasks.push({
+                id: `WL-${tasks.length + 1}`,
+                seq: tasks.length + 1, no: no || tasks.length + 1, sec,
+                cat: "Add_Work ( After Freeze W/L )", tag: `SEC-${sec}`, desc,
+                resp: resp || "Unassigned", vendor: newVendor, mo,
+                loto: String(row[5] ?? "").trim(), type: String(row[6] ?? "PM").trim(),
+                supports: ["SP", "ROI"], activeDays: [8, 9, 10], startDay: 8, endDay: 10,
+                planDays: "08 Nov – 10 Nov", weight: 3, isCancelled: false, isMajorCrit: false,
+                subtasks: generateStandardEngineeringSubTasks(desc, "", ["SP", "ROI"], ""),
+                photos: [], remarks: ""
+              });
+              syncedCount++;
+            }
+          }
+        });
+
+        populateVendorDropdowns();
+        populateResponsibleDropdown();
+        updateDashboard();
+        alert(`ซิงก์ข้อมูลจากไฟล์ "${file.name}" สำเร็จ (${syncedCount} รายการ)!`);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function openHandoverModal(preVendor) {
+      populateVendorDropdowns();
+      if (preVendor) document.getElementById("hoVendorSelect").value = preVendor;
+      renderHandoverSheet();
+      document.getElementById("handoverModal").classList.remove("hidden");
+      document.getElementById("handoverModal").classList.add("flex");
+    }
+    function closeHandoverModal() {
+      document.getElementById("handoverModal").classList.add("hidden");
+      document.getElementById("handoverModal").classList.remove("flex");
+    }
+    function renderHandoverSheet() {
+      const selVendor = document.getElementById("hoVendorSelect").value || "STP";
+      const selSec = document.getElementById("hoSecSelect").value || "ALL";
+      const docDate = document.getElementById("hoDocDate").value || "25 พฤศจิกายน 2026";
+      const hoTasks = tasks.filter(t => !t.isCancelled && (selVendor === "ALL" || t.vendor === selVendor) && (selSec === "ALL" || String(t.sec) === selSec));
+      const doneCnt = hoTasks.filter(t => getTaskProgress(t) === 100).length;
+
+      document.getElementById("handoverPrintArea").innerHTML = `
+        <div class="border-b-2 border-slate-900 pb-3 flex justify-between items-start">
+          <div>
+            <h1 class="font-extrabold text-lg">VENDOR WORK HANDOVER & QA/QC SIGN-OFF CERTIFICATE</h1>
+            <p class="text-xs font-bold text-slate-600">WL TAPP3_2026 Turnaround (01 Nov – 05 Dec 2026)</p>
+          </div>
+          <div class="text-right text-xs">
+            <div><strong>Vendor:</strong> ${selVendor}</div>
+            <div><strong>วันที่:</strong> ${docDate}</div>
+          </div>
+        </div>
+        <div class="text-xs bg-slate-50 p-3 rounded border border-slate-300 flex justify-between">
+          <span><strong>ผู้รับเหมา (Vendor):</strong> ${selVendor}</span>
+          <span><strong>จำนวนงานทั้งหมด:</strong> ${hoTasks.length} รายการ (เสร็จสมบูรณ์ ${doneCnt} งาน)</span>
+        </div>
+        <table class="print-table w-full text-xs border border-slate-400">
+          <thead>
+            <tr class="bg-slate-100">
+              <th class="w-8">ลำดับ</th><th class="w-10">Sec</th><th class="w-20">Tag</th><th class="w-24">MO / LOTO</th>
+              <th>รายละเอียดงาน (W/L Description)</th><th class="w-28">ช่วงวันเข้างาน</th><th class="w-14">สถานะ</th><th class="w-24">ลงนามตรวจรับ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${hoTasks.map((t, i) => `
+              <tr class="print-break-inside-avoid">
+                <td class="text-center font-bold">${i + 1}</td>
+                <td class="text-center">${t.sec}</td>
+                <td class="font-bold">${t.tag}</td>
+                <td>${t.mo || "-"}<br><span class="text-[9px]">LOTO: ${t.loto || "-"}</span></td>
+                <td><strong>${t.desc}</strong><br><span class="text-[9.5px] text-slate-500">ผู้รับผิดชอบ: ${t.resp}</span></td>
+                <td class="text-center">${t.planDays}</td>
+                <td class="text-center font-bold">${getTaskProgress(t)}%</td>
+                <td class="text-center text-[10px]">☐ ผ่าน<br>......../........</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+        <div class="grid grid-cols-4 gap-3 text-center text-xs pt-6 print-break-inside-avoid">
+          <div class="border border-slate-400 rounded p-3 space-y-5"><div class="font-bold">1. ผู้ส่งมอบงาน (${selVendor})</div><div>ลงชื่อ: ............................</div></div>
+          <div class="border border-slate-400 rounded p-3 space-y-5"><div class="font-bold">2. วิศวกรผู้รับผิดชอบ (ME)</div><div>ลงชื่อ: ............................</div></div>
+          <div class="border border-slate-400 rounded p-3 space-y-5"><div class="font-bold">3. ผู้ตรวจสอบ (ROI / QA)</div><div>ลงชื่อ: ............................</div></div>
+          <div class="border border-slate-400 rounded p-3 space-y-5"><div class="font-bold">4. ผู้อนุมัติรับมอบ (OPE/Mgr)</div><div>ลงชื่อ: ............................</div></div>
+        </div>
+      `;
+    }
+
+    function openAddTaskModal() {
+      populateVendorDropdowns();
+      document.getElementById("addTaskModal").classList.remove("hidden");
+      document.getElementById("addTaskModal").classList.add("flex");
+    }
+    function closeAddTaskModal() {
+      document.getElementById("addTaskModal").classList.add("hidden");
+      document.getElementById("addTaskModal").classList.remove("flex");
+    }
+    function createNewTask() {
+      const sec = document.getElementById("newTaskSec").value;
+      const tag = document.getElementById("newTaskTag").value.trim() || `SEC-${sec}`;
+      const sD = Math.min(35, Math.max(1, parseInt(document.getElementById("newTaskStartDay").value || "8", 10)));
+      const eD = Math.min(35, Math.max(sD, parseInt(document.getElementById("newTaskEndDay").value || "14", 10)));
+      const cat = document.getElementById("newTaskCat").value;
+      const desc = document.getElementById("newTaskDesc").value.trim();
+      const resp = document.getElementById("newTaskResp").value.trim() || "SARIN S.";
+      const vendor = document.getElementById("newTaskVendorSelect").value || "PROTECH";
+      const mo = document.getElementById("newTaskMO").value.trim();
+      const loto = document.getElementById("newTaskLoto").value.trim();
+      if (!desc) return alert("กรุณาระบุรายละเอียดงาน");
+
+      const days = [];
+      for (let d = sD; d <= eD; d++) days.push(d);
+
+      tasks.unshift({
+        id: `WL-${tasks.length + 1}`,
+        seq: tasks.length + 1, no: tasks.length + 1, sec, cat, tag, desc, resp, vendor, mo, loto,
+        type: "ADD", supports: ["SP", "ROI"], activeDays: days, startDay: sD, endDay: eD,
+        planDays: `${fmtDayIdx(sD)} – ${fmtDayIdx(eD)}`, weight: days.length,
+        isCancelled: false, isMajorCrit: true,
+        subtasks: generateStandardEngineeringSubTasks(desc, loto, ["SP", "ROI"], ""),
+        photos: [], remarks: ""
+      });
+      populateVendorDropdowns();
+      populateResponsibleDropdown();
+      closeAddTaskModal();
+      updateDashboard();
+    }
+
+    function openPhotoGalleryModal() {
+      const grid = document.getElementById("photoGalleryGrid");
+      const allPhotos = [];
+      tasks.forEach(t => (t.photos || []).forEach(p => allPhotos.push({ seq: t.seq, tag: t.tag, sec: t.sec, resp: t.resp, vendor: t.vendor, desc: t.desc, url: p.url, time: p.time })));
+      grid.innerHTML = allPhotos.length === 0
+        ? `<div class="col-span-3 text-center py-12 text-slate-400 text-sm">ยังไม่มีรูปภาพที่แนบเข้ามาในระบบ</div>`
+        : allPhotos.map(item => `
+            <div class="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 shadow-sm">
+              <img src="${item.url}" class="w-full h-44 object-cover" />
+              <div class="p-3 text-xs space-y-1">
+                <div class="flex justify-between"><span class="font-bold text-blue-700">#${item.seq} • Sec ${item.sec} • ${item.tag}</span><span class="text-[10px] text-slate-400">${item.time}</span></div>
+                <p class="text-slate-700 font-medium line-clamp-2">${item.desc}</p>
+                <p class="text-slate-500">🏢 <strong>${item.vendor}</strong> • 👤 ${item.resp}</p>
+              </div>
+            </div>
+          `).join("");
+      document.getElementById("photoGalleryModal").classList.remove("hidden");
+      document.getElementById("photoGalleryModal").classList.add("flex");
+    }
+    function closePhotoGalleryModal() {
+      document.getElementById("photoGalleryModal").classList.add("hidden");
+      document.getElementById("photoGalleryModal").classList.remove("flex");
+    }
+
+    function exportAllToExcel() {
+      const wb = XLSX.utils.book_new();
+      const rows281 = tasks.map(t => ({
+        "Seq": t.seq, "No.": t.no, "Section": t.sec, "Category": t.cat, "Equipment Tag": t.tag,
+        "W/L Description": t.desc, "Vendor": t.vendor, "Responsible": t.resp, "MO No.": t.mo,
+        "LOTO": t.loto, "Schedule Window": t.planDays, "Active Days (1-35)": (t.activeDays || []).join(","),
+        "Task-Days Weight": t.weight, "Progress (%)": t.isCancelled ? "Cancelled" : getTaskProgress(t),
+        "Remarks": t.remarks || ""
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows281), "WL_TA26_All281");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(critSchedules), "Critical_Path_Gantt");
+      XLSX.writeFile(wb, `TAPP3_2026_Complete_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+
+    window.addEventListener("DOMContentLoaded", initApp);
+  </script>
+<!-- ระบบเชื่อมต่อฐานข้อมูลบน GitHub 100% (ไม่ต้องใช้ Firebase) -->
+<script>
+  const GH_CONFIG_KEY = "TAPP3_GH_SYNC_CONFIG";
+
+  function createGitHubSyncBar() {
+    const bar = document.createElement("div");
+    bar.className = "bg-indigo-950 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2 border-b border-indigo-800 no-print";
+    bar.innerHTML = `
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="bg-emerald-500 text-slate-950 font-extrabold px-2 py-0.5 rounded">☁️ GitHub Cloud Mode</span>
+        <span id="ghSyncStatus" class="text-indigo-200">ยังไม่ได้เชื่อมต่อคลังข้อมูล GitHub (กดปุ่มตั้งค่าด้านขวา)</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="pullFromGitHub()" class="bg-indigo-700 hover:bg-indigo-600 px-3 py-1 rounded font-bold transition">🔄 ดึงข้อมูลล่าสุด</button>
+        <button onclick="pushToGitHub()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1 rounded font-extrabold shadow transition">💾 บันทึกการแก้ไขขึ้นเว็บกลาง</button>
+        <button onclick="setupGitHubConnection()" class="bg-slate-800 hover:bg-slate-700 border border-slate-600 px-2.5 py-1 rounded font-semibold">⚙️ ตั้งค่ารหัสทีม</button>
+      </div>
+    `;
+    document.body.prepend(bar);
+  }
+
+  function getGhConfig() {
+    try { return JSON.parse(localStorage.getItem(GH_CONFIG_KEY)) || {}; } catch (e) { return {}; }
+  }
+
+  function setupGitHubConnection() {
+    const cur = getGhConfig();
+    const repo = prompt("1. ระบุชื่อบัญชีและชื่อคลัง GitHub (รูปแบบ: ชื่อบัญชี/ชื่อคลัง เช่น bodin/tapp3-ta2026):", cur.repo || "");
+    if (!repo) return;
+    const token = prompt("2. วางรหัสเชื่อมต่อทีม (GitHub Token - ghp_... หรือ github_pat_...):\n*เว้นว่างได้หากต้องการเปิดดูข้อมูลอย่างเดียว*", cur.token || "");
+    localStorage.setItem(GH_CONFIG_KEY, JSON.stringify({ repo: repo.trim(), token: (token || "").trim() }));
+    pullFromGitHub();
+  }
+
+  async function pullFromGitHub() {
+    const { repo, token } = getGhConfig();
+    const statusEl = document.getElementById("ghSyncStatus");
+    if (!repo) return;
+    statusEl.textContent = "⏳ กำลังดึงข้อมูลล่าสุดจาก GitHub...";
+    try {
+      const headers = { "Accept": "application/vnd.github.v3+json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`https://api.github.com/repos/${repo}/contents/tapp3_data.json?t=${Date.now()}`, { headers });
+      if (res.status === 404) {
+        statusEl.textContent = `✅ เชื่อมต่อ ${repo} แล้ว (กดปุ่ม "💾 บันทึกการแก้ไขขึ้นเว็บกลาง" เพื่อสร้างฐานข้อมูลครั้งแรก)`;
+        return;
+      }
+      const data = await res.json();
+      const jsonStr = decodeURIComponent(escape(atob(data.content.replace(/\n/g, ""))));
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.tasks && parsed.tasks.length) tasks = parsed.tasks;
+      if (parsed.critSchedules) critSchedules = parsed.critSchedules;
+      if (parsed.vendorList) vendorList = parsed.vendorList;
+      localStorage.setItem("TAPP3_GH_LAST_SHA", data.sha);
+      populateVendorDropdowns();
+      populateResponsibleDropdown();
+      updateDashboard();
+      statusEl.textContent = `✅ ซิงก์ข้อมูลล่าสุดเมื่อ: ${parsed.updatedAt || "สักครู่"} (${ token ? "โหมดแก้ไขได้" : "โหมดดูอย่างเดียว" })`;
+    } catch (err) {
+      statusEl.textContent = "⚠️ ไม่สามารถดึงข้อมูลได้ กรุณาตรวจสอบชื่อ Repo หรือรหัส Token";
+    }
+  }
+
+  async function pushToGitHub() {
+    const { repo, token } = getGhConfig();
+    const statusEl = document.getElementById("ghSyncStatus");
+    if (!repo || !token) {
+      alert("กรุณากดปุ่ม '⚙️ ตั้งค่ารหัสทีม' และใส่รหัส Token ก่อนบันทึกข้อมูลขึ้นเว็บกลางครับ");
+      return setupGitHubConnection();
+    }
+    statusEl.textContent = "⏳ กำลังบันทึกข้อมูลขึ้น GitHub...";
+    try {
+      let sha = localStorage.getItem("TAPP3_GH_LAST_SHA") || undefined;
+      const checkRes = await fetch(`https://api.github.com/repos/${repo}/contents/tapp3_data.json?t=${Date.now()}`, {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json" }
+      });
+      if (checkRes.ok) {
+        const curFile = await checkRes.json();
+        sha = curFile.sha;
+      }
+      const payload = {
+        updatedAt: new Date().toLocaleString("th-TH"),
+        tasks, critSchedules, vendorList
+      };
+      const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+      const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/tapp3_data.json`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github.v3+json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: `Update T/A progress (${payload.updatedAt})`,
+          content: contentBase64,
+          sha
+        })
+      });
+      if (!putRes.ok) throw new Error("Save failed");
+      const putData = await putRes.json();
+      localStorage.setItem("TAPP3_GH_LAST_SHA", putData.content.sha);
+      statusEl.textContent = `✅ บันทึกขึ้นเว็บกลางสำเร็จเมื่อ ${payload.updatedAt} (ทุกคนเห็นข้อมูลล่าสุดแล้ว!)`;
+    } catch (err) {
+      alert("บันทึกไม่สำเร็จ กรุณาตรวจสอบว่า Token มีสิทธิ์ Read and Write ในส่วน Contents แล้ว");
+      statusEl.textContent = "❌ บันทึกไม่สำเร็จ";
+    }
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    createGitHubSyncBar();
+    setTimeout(pullFromGitHub, 500);
+  });
+</script>
+</body>
+</html>
